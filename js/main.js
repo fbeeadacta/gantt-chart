@@ -16,6 +16,14 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (savedTheme) App.state.theme = JSON.parse(savedTheme);
     } catch(e) {}
 
+    // Ripristina showDependencyArrows da localStorage
+    try {
+        const savedDeps = localStorage.getItem('gantt_showDependencyArrows');
+        if (savedDeps !== null) {
+            App.state.showDependencyArrows = savedDeps !== '0';
+        }
+    } catch(e) {}
+
     // Tenta riconnessione alla cartella
     if (App.state.fsAccessSupported) {
         await App.Workspace.reconnect();
@@ -181,6 +189,25 @@ function toggleToolsPanel() {
     try { localStorage.setItem('gantt_toolsPanelCollapsed', collapsed ? '1' : '0'); } catch(e) {}
 }
 
+// Dependencies panel
+function toggleDepsPanel() {
+    App.UI.toggleDepsPanel();
+}
+
+// Dependency arrows toggle (state only, called from panel checkbox)
+function toggleDependencyArrows() {
+    const checkbox = document.getElementById('deps-global-toggle');
+    if (checkbox) {
+        App.state.showDependencyArrows = checkbox.checked;
+    } else {
+        App.state.showDependencyArrows = !App.state.showDependencyArrows;
+    }
+    try { localStorage.setItem('gantt_showDependencyArrows', App.state.showDependencyArrows ? '1' : '0'); } catch(e) {}
+    if (App.state.currentView === 'gantt') {
+        App.UI.renderGanttView();
+    }
+}
+
 // Export
 function exportSVG() {
     App.Exporter.exportSVG();
@@ -218,6 +245,9 @@ document.addEventListener('keydown', (e) => {
         }
         if (document.getElementById('settings-panel').classList.contains('open')) {
             App.UI.closeSettingsPanel();
+        }
+        if (document.getElementById('deps-panel').classList.contains('open')) {
+            App.UI.toggleDepsPanel();
         }
     }
 });

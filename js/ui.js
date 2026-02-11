@@ -329,6 +329,13 @@ App.UI = {
                     <button type="button" id="btn-add-segment" class="btn btn-secondary" style="margin-top:8px;font-size:12px;">+ Aggiungi segmento</button>
                 </div>
             </details>
+            <details class="segments-collapsible">
+                <summary>Dipendenze</summary>
+                <div class="segments-collapsible-body">
+                    <div id="deps-container"></div>
+                    <button type="button" id="btn-add-dep" class="btn btn-secondary" style="margin-top:8px;font-size:12px;">+ Aggiungi dipendenza</button>
+                </div>
+            </details>
         `, () => {
             const phaseId = document.getElementById('input-act-phase').value;
             const name = document.getElementById('input-act-name').value.trim();
@@ -352,24 +359,41 @@ App.UI = {
                 }
             });
 
+            // Raccolta dipendenze
+            const depRows = document.querySelectorAll('#deps-container .dep-row');
+            const deps = [];
+            depRows.forEach(row => {
+                const predId = row.querySelector('.dep-predecessor')?.value;
+                const fromPoint = row.querySelector('.dep-from-point')?.value;
+                const toPoint = row.querySelector('.dep-to-point')?.value;
+                const offset = parseInt(row.querySelector('.dep-offset')?.value) || 0;
+                if (predId) {
+                    deps.push({ predecessorId: predId, fromPoint: fromPoint || 'end', toPoint: toPoint || 'start', offsetDays: offset });
+                }
+            });
+
             addActivity(phaseId, name, startDate, endDate, progress, hasMilestone);
 
-            // Applica segmenti all'attività appena creata
-            if (segments.length > 0) {
-                const project = App.getCurrentProject();
-                const phase = project.phases.find(p => p.id === phaseId);
-                if (phase) {
-                    const act = phase.activities[phase.activities.length - 1];
-                    if (act) {
-                        act.segments = segments;
-                        App.Actions.saveAndRender();
+            // Applica segmenti e dipendenze all'attività appena creata
+            const project = App.getCurrentProject();
+            const phase = project.phases.find(p => p.id === phaseId);
+            if (phase) {
+                const act = phase.activities[phase.activities.length - 1];
+                if (act) {
+                    if (segments.length > 0) act.segments = segments;
+                    if (deps.length > 0) {
+                        act.dependencies = deps;
+                        App.Dependencies.applyOwnDependencies(project, act.id);
+                        App.Dependencies.cascadeDependents(project, act.id);
                     }
+                    App.Actions.saveAndRender();
                 }
             }
         });
 
         this._initSegmentButtons();
         this._initDurationSync();
+        this._initDependencyButtons(null);
     },
 
     // === Panel: Modifica Attività ===
@@ -448,6 +472,15 @@ App.UI = {
                     <button type="button" id="btn-add-segment" class="btn btn-secondary" style="margin-top:8px;font-size:12px;">+ Aggiungi segmento</button>
                 </div>
             </details>
+            <details class="segments-collapsible">
+                <summary>Dipendenze${(act.dependencies || []).length ? ` (${(act.dependencies || []).length})` : ''}</summary>
+                <div class="segments-collapsible-body">
+                    <div id="deps-container">
+                        ${this._renderDepRows(project, act)}
+                    </div>
+                    <button type="button" id="btn-add-dep" class="btn btn-secondary" style="margin-top:8px;font-size:12px;">+ Aggiungi dipendenza</button>
+                </div>
+            </details>
         `, () => {
             const newPhaseId = document.getElementById('input-act-phase').value;
             act.name = document.getElementById('input-act-name').value.trim() || act.name;
@@ -471,6 +504,20 @@ App.UI = {
             });
             act.segments = segments.length > 0 ? segments : undefined;
 
+            // Raccolta dipendenze
+            const depRows = document.querySelectorAll('#deps-container .dep-row');
+            const deps = [];
+            depRows.forEach(row => {
+                const predId = row.querySelector('.dep-predecessor')?.value;
+                const fromPoint = row.querySelector('.dep-from-point')?.value;
+                const toPoint = row.querySelector('.dep-to-point')?.value;
+                const offset = parseInt(row.querySelector('.dep-offset')?.value) || 0;
+                if (predId) {
+                    deps.push({ predecessorId: predId, fromPoint: fromPoint || 'end', toPoint: toPoint || 'start', offsetDays: offset });
+                }
+            });
+            act.dependencies = deps.length > 0 ? deps : undefined;
+
             // Spostamento tra fasi
             if (newPhaseId !== currentPhaseId) {
                 const srcPhase = project.phases.find(p => p.id === currentPhaseId);
@@ -480,8 +527,14 @@ App.UI = {
                     dstPhase.activities.push(act);
                 }
             }
+
+            // Applica dipendenze (sposta la barra per rispettare offset) + cascata dipendenti
+            App.Dependencies.applyOwnDependencies(project, actId);
+            App.Dependencies.cascadeDependents(project, actId);
             App.Actions.saveAndRender();
         }, () => {
+            // Cleanup dipendenze orfane prima di eliminare
+            App.Dependencies.cleanupDependencies(project, actId);
             const phase = project.phases.find(p => p.id === currentPhaseId);
             if (phase) {
                 phase.activities = phase.activities.filter(a => a.id !== actId);
@@ -492,6 +545,7 @@ App.UI = {
         // Wire up segment add/remove buttons
         this._initSegmentButtons();
         this._initDurationSync();
+        this._initDependencyButtons(actId);
     },
 
     _initDurationSync() {
@@ -602,6 +656,124 @@ App.UI = {
                     const ed = new Date(s);
                     ed.setDate(ed.getDate() + days);
                     segEnd.value = App.Utils.toISODate(ed);
+                }
+            }
+        });
+    },
+
+    _renderDepRows(project, act) {
+        if (!act.dependencies || act.dependencies.length === 0) return '';
+        return act.dependencies.map((dep, i) => {
+            const predAct = App.Dependencies.findActivityById(project, dep.predecessorId);
+            const predName = predAct ? predAct.name : '(eliminata)';
+            const options = this._getDepPredecessorOptions(project, act.id, dep.predecessorId);
+            return `<div class="dep-row">
+                <select class="form-input dep-predecessor">${options}</select>
+                <select class="form-input dep-from-point">
+                    <option value="end" ${dep.fromPoint === 'end' ? 'selected' : ''}>Fine</option>
+                    <option value="start" ${dep.fromPoint === 'start' ? 'selected' : ''}>Inizio</option>
+                </select>
+                <span class="dep-arrow-symbol">&rarr;</span>
+                <select class="form-input dep-to-point">
+                    <option value="start" ${dep.toPoint === 'start' ? 'selected' : ''}>Inizio</option>
+                    <option value="end" ${dep.toPoint === 'end' ? 'selected' : ''}>Fine</option>
+                </select>
+                <input type="number" class="form-input dep-offset" value="${dep.offsetDays}" title="Offset in giorni" />
+                <span class="dep-offset-label">gg</span>
+                <button type="button" class="btn btn-danger btn-small dep-remove" title="Rimuovi">&times;</button>
+            </div>`;
+        }).join('');
+    },
+
+    _getDepPredecessorOptions(project, selfId, selectedId) {
+        let html = '<option value="">-- Seleziona --</option>';
+        for (const phase of project.phases) {
+            for (const act of phase.activities) {
+                if (act.id === selfId) continue;
+                const label = this.escapeHtml(phase.name + ' / ' + act.name);
+                html += `<option value="${act.id}" ${act.id === selectedId ? 'selected' : ''}>${label}</option>`;
+            }
+        }
+        return html;
+    },
+
+    _initDependencyButtons(actId) {
+        const addBtn = document.getElementById('btn-add-dep');
+        const container = document.getElementById('deps-container');
+        if (!addBtn || !container) return;
+
+        const project = App.getCurrentProject();
+        if (!project) return;
+
+        addBtn.addEventListener('click', () => {
+            const options = this._getDepPredecessorOptions(project, actId, null);
+            const row = document.createElement('div');
+            row.className = 'dep-row';
+            row.innerHTML = `
+                <select class="form-input dep-predecessor">${options}</select>
+                <select class="form-input dep-from-point">
+                    <option value="end">Fine</option>
+                    <option value="start">Inizio</option>
+                </select>
+                <span class="dep-arrow-symbol">&rarr;</span>
+                <select class="form-input dep-to-point">
+                    <option value="start">Inizio</option>
+                    <option value="end">Fine</option>
+                </select>
+                <input type="number" class="form-input dep-offset" value="0" title="Offset in giorni" />
+                <span class="dep-offset-label">gg</span>
+                <button type="button" class="btn btn-danger btn-small dep-remove" title="Rimuovi">&times;</button>
+            `;
+            container.appendChild(row);
+        });
+
+        // Event delegation: rimuovi riga + auto-calcolo offset + verifica circolarità
+        container.addEventListener('click', (e) => {
+            const removeBtn = e.target.closest('.dep-remove');
+            if (removeBtn) {
+                e.stopPropagation();
+                const row = removeBtn.closest('.dep-row');
+                if (row) row.remove();
+            }
+        });
+
+        container.addEventListener('change', (e) => {
+            const row = e.target.closest('.dep-row');
+            if (!row) return;
+            const predSelect = row.querySelector('.dep-predecessor');
+            const fromSelect = row.querySelector('.dep-from-point');
+            const toSelect = row.querySelector('.dep-to-point');
+            const offsetInput = row.querySelector('.dep-offset');
+
+            if (e.target === predSelect) {
+                const predId = predSelect.value;
+                if (!predId) return;
+
+                // Verifica circolarità
+                if (App.Dependencies.hasCircularDependency(project, actId, predId)) {
+                    App.UI.toast('Dipendenza circolare rilevata!', 'error');
+                    predSelect.value = '';
+                    return;
+                }
+
+                // Auto-calcolo offset
+                const pred = App.Dependencies.findActivityById(project, predId);
+                const depAct = App.Dependencies.findActivityById(project, actId);
+                if (pred && depAct) {
+                    const offset = App.Dependencies.computeOffset(pred, depAct, fromSelect.value, toSelect.value);
+                    offsetInput.value = offset;
+                }
+            }
+
+            // Ricalcola offset se cambiano fromPoint o toPoint
+            if (e.target === fromSelect || e.target === toSelect) {
+                const predId = predSelect.value;
+                if (!predId) return;
+                const pred = App.Dependencies.findActivityById(project, predId);
+                const depAct = App.Dependencies.findActivityById(project, actId);
+                if (pred && depAct) {
+                    const offset = App.Dependencies.computeOffset(pred, depAct, fromSelect.value, toSelect.value);
+                    offsetInput.value = offset;
                 }
             }
         });
@@ -805,6 +977,238 @@ App.UI = {
         backdrop.classList.toggle('visible', App.state.versionsPanelOpen);
         if (App.state.versionsPanelOpen) {
             this.renderVersionsPanel();
+        }
+    },
+
+    // === DEPENDENCIES PANEL ===
+    renderDepsPanel() {
+        const project = App.getCurrentProject();
+        const body = document.getElementById('deps-panel-body');
+        if (!project || !body) return;
+
+        // Toggle globale
+        let html = `<div class="deps-toggle-row">
+            <span>Mostra frecce</span>
+            <label class="toggle-switch">
+                <input type="checkbox" id="deps-global-toggle"
+                    ${App.state.showDependencyArrows ? 'checked' : ''}
+                    onchange="toggleDependencyArrows()" />
+                <span class="toggle-slider"></span>
+            </label>
+        </div>`;
+
+        // Form nuova dipendenza
+        const actOptions = this._getDepsPanelActivityOptions(project);
+        html += `<div class="deps-add-form">
+            <div class="deps-add-row">
+                <label>Predecessore</label>
+                <select class="form-input" id="deps-add-pred">${actOptions}</select>
+            </div>
+            <div class="deps-add-row">
+                <label>Dipendente</label>
+                <select class="form-input" id="deps-add-dep">${actOptions}</select>
+            </div>
+            <div class="deps-add-row deps-add-type-row">
+                <select class="form-input" id="deps-add-from">
+                    <option value="end">Fine</option>
+                    <option value="start">Inizio</option>
+                </select>
+                <span class="dep-arrow-symbol">\u2192</span>
+                <select class="form-input" id="deps-add-to">
+                    <option value="start">Inizio</option>
+                    <option value="end">Fine</option>
+                </select>
+                <input type="number" class="form-input" id="deps-add-offset" value="0" title="Offset giorni" style="width:50px;text-align:center;" />
+                <span class="dep-offset-label">gg</span>
+            </div>
+            <button class="btn btn-primary" id="deps-add-btn" style="width:100%;font-size:12px;">+ Aggiungi dipendenza</button>
+        </div>`;
+
+        // Raccogli dipendenze raggruppate per predecessore
+        const groups = new Map();
+        for (const phase of project.phases) {
+            for (const act of phase.activities) {
+                if (!act.dependencies) continue;
+                for (const dep of act.dependencies) {
+                    if (!groups.has(dep.predecessorId)) groups.set(dep.predecessorId, []);
+                    groups.get(dep.predecessorId).push({
+                        dep, dependentId: act.id, dependentName: act.name, dependentPhaseName: phase.name
+                    });
+                }
+            }
+        }
+
+        if (groups.size === 0) {
+            html += '<div class="deps-empty">Nessuna dipendenza configurata</div>';
+        } else {
+            for (const [predId, items] of groups) {
+                const predAct = App.Dependencies.findActivityById(project, predId);
+                const predName = predAct ? predAct.name : '(eliminata)';
+                let phaseName = '';
+                for (const ph of project.phases) {
+                    if (ph.activities.some(a => a.id === predId)) { phaseName = ph.name; break; }
+                }
+
+                html += `<details class="deps-group">
+                    <summary class="deps-group-header">${this.escapeHtml(phaseName)} / ${this.escapeHtml(predName)} <span class="deps-group-count">(${items.length})</span></summary>`;
+
+                for (const item of items) {
+                    html += `<div class="deps-item" data-dependent-id="${item.dependentId}" data-predecessor-id="${predId}">
+                        <div class="deps-item-name">\u2192 ${this.escapeHtml(item.dependentPhaseName)} / ${this.escapeHtml(item.dependentName)}</div>
+                        <div class="deps-item-controls">
+                            <select class="form-input dep-panel-from">
+                                <option value="end" ${item.dep.fromPoint === 'end' ? 'selected' : ''}>Fine</option>
+                                <option value="start" ${item.dep.fromPoint === 'start' ? 'selected' : ''}>Inizio</option>
+                            </select>
+                            <span class="dep-arrow-symbol">\u2192</span>
+                            <select class="form-input dep-panel-to">
+                                <option value="start" ${item.dep.toPoint === 'start' ? 'selected' : ''}>Inizio</option>
+                                <option value="end" ${item.dep.toPoint === 'end' ? 'selected' : ''}>Fine</option>
+                            </select>
+                            <input type="number" class="form-input dep-panel-offset" value="${item.dep.offsetDays || 0}" title="Offset giorni" />
+                            <span class="dep-offset-label">gg</span>
+                            <button class="btn btn-danger btn-small dep-panel-remove" title="Rimuovi">\u00d7</button>
+                        </div>
+                    </div>`;
+                }
+                html += '</details>';
+            }
+        }
+
+        body.innerHTML = html;
+        this._initDepsPanelEvents();
+    },
+
+    _initDepsPanelEvents() {
+        const body = document.getElementById('deps-panel-body');
+        if (!body) return;
+
+        body.addEventListener('change', (e) => {
+            const item = e.target.closest('.deps-item');
+            if (!item) return;
+
+            const depTarget = e.target.closest('.dep-panel-from, .dep-panel-to, .dep-panel-offset');
+            if (!depTarget) return;
+
+            const dependentId = item.getAttribute('data-dependent-id');
+            const predecessorId = item.getAttribute('data-predecessor-id');
+            const project = App.getCurrentProject();
+            if (!project) return;
+
+            const act = App.Dependencies.findActivityById(project, dependentId);
+            if (!act || !act.dependencies) return;
+
+            const dep = act.dependencies.find(d => d.predecessorId === predecessorId);
+            if (!dep) return;
+
+            // Read current values from the controls
+            const fromSel = item.querySelector('.dep-panel-from');
+            const toSel = item.querySelector('.dep-panel-to');
+            const offsetInput = item.querySelector('.dep-panel-offset');
+
+            dep.fromPoint = fromSel.value;
+            dep.toPoint = toSel.value;
+            dep.offsetDays = parseInt(offsetInput.value) || 0;
+
+            App.Dependencies.applyOwnDependencies(project, dependentId);
+            App.Dependencies.cascadeDependents(project, dependentId);
+            App.Actions.saveAndRender();
+        });
+
+        body.addEventListener('click', (e) => {
+            const removeBtn = e.target.closest('.dep-panel-remove');
+            if (!removeBtn) return;
+
+            const item = removeBtn.closest('.deps-item');
+            if (!item) return;
+
+            const dependentId = item.getAttribute('data-dependent-id');
+            const predecessorId = item.getAttribute('data-predecessor-id');
+            const project = App.getCurrentProject();
+            if (!project) return;
+
+            const act = App.Dependencies.findActivityById(project, dependentId);
+            if (!act || !act.dependencies) return;
+
+            act.dependencies = act.dependencies.filter(d => d.predecessorId !== predecessorId);
+            if (act.dependencies.length === 0) delete act.dependencies;
+
+            App.Actions.saveAndRender();
+            this.renderDepsPanel();
+        });
+
+        // Pulsante aggiungi dipendenza
+        const addBtn = document.getElementById('deps-add-btn');
+        if (addBtn) {
+            addBtn.addEventListener('click', () => {
+                const predId = document.getElementById('deps-add-pred').value;
+                const depId = document.getElementById('deps-add-dep').value;
+                const fromPoint = document.getElementById('deps-add-from').value;
+                const toPoint = document.getElementById('deps-add-to').value;
+                const offset = parseInt(document.getElementById('deps-add-offset').value) || 0;
+
+                if (!predId || !depId) {
+                    App.UI.toast('Seleziona predecessore e dipendente', 'warning');
+                    return;
+                }
+                if (predId === depId) {
+                    App.UI.toast('Predecessore e dipendente devono essere diversi', 'warning');
+                    return;
+                }
+
+                const project = App.getCurrentProject();
+                if (!project) return;
+
+                // Verifica circolarità
+                if (App.Dependencies.hasCircularDependency(project, depId, predId)) {
+                    App.UI.toast('Dipendenza circolare rilevata!', 'error');
+                    return;
+                }
+
+                // Verifica duplicato
+                const act = App.Dependencies.findActivityById(project, depId);
+                if (!act) return;
+                if (!act.dependencies) act.dependencies = [];
+                if (act.dependencies.some(d => d.predecessorId === predId)) {
+                    App.UI.toast('Dipendenza già esistente', 'warning');
+                    return;
+                }
+
+                act.dependencies.push({ predecessorId: predId, fromPoint, toPoint, offsetDays: offset });
+                App.Dependencies.applyOwnDependencies(project, depId);
+                App.Dependencies.cascadeDependents(project, depId);
+                App.Actions.saveAndRender();
+                this.renderDepsPanel();
+            });
+        }
+    },
+
+    _getDepsPanelActivityOptions(project) {
+        let html = '<option value="">-- Seleziona --</option>';
+        for (const phase of project.phases) {
+            for (const act of phase.activities) {
+                const label = this.escapeHtml(phase.name + ' / ' + act.name);
+                html += `<option value="${act.id}">${label}</option>`;
+            }
+        }
+        return html;
+    },
+
+    toggleDepsPanel() {
+        const panel = document.getElementById('deps-panel');
+        const backdrop = document.getElementById('deps-panel-backdrop');
+        const btn = document.getElementById('btn-toggle-deps');
+        if (!panel) return;
+        const isOpen = panel.classList.contains('open');
+        if (isOpen) {
+            panel.classList.remove('open');
+            backdrop.classList.remove('visible');
+            if (btn) btn.classList.remove('tools-btn-active');
+        } else {
+            this.renderDepsPanel();
+            panel.classList.add('open');
+            backdrop.classList.add('visible');
+            if (btn) btn.classList.add('tools-btn-active');
         }
     },
 

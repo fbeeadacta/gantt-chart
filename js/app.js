@@ -5,6 +5,7 @@ const App = {
         currentProjectId: null,
         currentView: 'dashboard', // 'dashboard' | 'gantt'
         baselineActive: false,
+        showDependencyArrows: true,
         versionsPanelOpen: false,
         customToday: null, // null = data reale, oppure 'YYYY-MM-DD'
         dirHandle: null,

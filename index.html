@@ -103,6 +103,11 @@
                     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
                     <span>Nuova Milestone</span>
                 </button>
+                <div class="tools-separator"></div>
+                <button class="tools-btn" id="btn-toggle-deps" onclick="toggleDepsPanel()" title="Gestisci dipendenze">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+                    <span>Dipendenze</span>
+                </button>
             </div>
         </div>
         <div id="gantt-svg-container"></div>
@@ -119,6 +124,20 @@
         </button>
     </div>
     <div id="versions-list"></div>
+</div>
+
+<!-- ==================== DEPENDENCIES PANEL ==================== -->
+<div id="deps-panel-backdrop" onclick="toggleDepsPanel()"></div>
+<div id="deps-panel">
+    <div class="deps-panel-header">
+        <h3>Dipendenze</h3>
+        <button class="btn-icon" onclick="toggleDepsPanel()" title="Chiudi">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+            </svg>
+        </button>
+    </div>
+    <div id="deps-panel-body"></div>
 </div>
 
 <!-- ==================== SETTINGS PANEL (generico) ==================== -->
@@ -153,6 +172,7 @@
 <!-- ==================== SCRIPTS ==================== -->
 <script src="js/app.js"></script>
 <script src="js/utils.js"></script>
+<script src="js/dependencies.js"></script>
 <script src="js/workspace.js"></script>
 <script src="js/storage.js"></script>
 <script src="js/gantt.js"></script>

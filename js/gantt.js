@@ -44,6 +44,21 @@ App.Gantt = {
         shadow.setAttribute('flood-opacity', '0.35');
         filter.appendChild(shadow);
         defs.appendChild(filter);
+
+        // Marker freccia per dipendenze
+        const marker = document.createElementNS(this.ns, 'marker');
+        marker.setAttribute('id', 'dep-arrowhead');
+        marker.setAttribute('markerWidth', '5');
+        marker.setAttribute('markerHeight', '4');
+        marker.setAttribute('refX', '5');
+        marker.setAttribute('refY', '2');
+        marker.setAttribute('orient', 'auto');
+        const arrowPoly = document.createElementNS(this.ns, 'polygon');
+        arrowPoly.setAttribute('points', '0 0, 5 2, 0 4');
+        arrowPoly.setAttribute('fill', '#666');
+        marker.appendChild(arrowPoly);
+        defs.appendChild(marker);
+
         svg.appendChild(defs);
 
         // Style: hover effects
@@ -64,6 +79,9 @@ App.Gantt = {
         this.renderPanelGrip(svg, layout);
         this.renderMonthGrips(svg, layout);
         this.renderSteeringRow(svg, project, layout);
+        if (App.state.showDependencyArrows) {
+            this.renderDependencyArrows(svg, project, layout);
+        }
         this.renderPhases(svg, project, layout);
         this.renderTodayLine(svg, layout);
         this.renderBottomGrip(svg, layout, totalHeight, svgWidth);
@@ -905,5 +923,33 @@ App.Gantt = {
         r.setAttribute('stroke-dasharray', '3,2');
         svg.appendChild(r);
         return r;
+    },
+
+    // === DEPENDENCY ARROWS ===
+    renderDependencyArrows(svg, project, layout) {
+        const arrows = App.Dependencies.getDependencyArrows(project, layout);
+        for (const a of arrows) {
+            const d = this._depArrowPath(a.fromX, a.fromY, a.toX, a.toY, a.aboveToY, a.dropX);
+            const path = document.createElementNS(this.ns, 'path');
+            path.setAttribute('d', d);
+            path.setAttribute('fill', 'none');
+            path.setAttribute('stroke', '#666');
+            path.setAttribute('stroke-width', '1.5');
+            path.setAttribute('marker-end', 'url(#dep-arrowhead)');
+            path.setAttribute('class', 'dep-arrow');
+            svg.appendChild(path);
+        }
+    },
+
+    _depArrowPath(fromX, fromY, toX, toY, aboveToY, dropX) {
+        const gap = 12; // spazio per uscire dalla barra
+        if (fromX + gap < toX - gap) {
+            // Caso standard: H → V sopra barra → scende a sinistra → H entra al centro
+            const midX = dropX != null ? dropX : (fromX + toX) / 2;
+            return `M ${fromX} ${fromY} H ${midX} V ${aboveToY} H ${toX - gap} V ${toY} H ${toX}`;
+        } else {
+            // Caso inverso: route sopra la barra dep, poi scende → H entra al centro
+            return `M ${fromX} ${fromY} H ${fromX + gap} V ${aboveToY} H ${toX - gap} V ${toY} H ${toX}`;
+        }
     }
 };

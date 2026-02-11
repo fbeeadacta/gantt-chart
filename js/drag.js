@@ -630,6 +630,9 @@ App.Drag = {
             } else {
                 act.startDate = App.Utils.toISODate(newStart);
                 act.endDate = App.Utils.toISODate(newEnd);
+                // Ricalcola offset delle proprie dipendenze + cascata dipendenti
+                App.Dependencies.recalcOwnOffsets(App.getCurrentProject(), s.actId);
+                App.Dependencies.cascadeDependents(App.getCurrentProject(), s.actId);
             }
             App.Actions.saveAndRender();
         }
