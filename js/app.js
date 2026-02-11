@@ -11,7 +11,20 @@ const App = {
         fsAccessSupported: 'showDirectoryPicker' in window,
         monthWidth: null, // null = auto-fit, oppure larghezza fissa in px SVG
         leftPanelWidth: null, // null = default da App.GANTT.leftPanelWidth (380px)
-        svgHeight: null // null = default calcolato, oppure altezza custom in px SVG
+        svgHeight: null, // null = default calcolato, oppure altezza custom in px SVG
+        theme: {} // override colori/font, merge con DEFAULTS_THEME
+    },
+
+    DEFAULTS_THEME: {
+        fontFamily: 'Arial, sans-serif',
+        activityBg: '#a8c8e8',
+        activityFill: '#1a3a5c',
+        phaseFill: '#1a3a5c',
+        headerBg: '#5c88da',
+        phaseLabelBg: '#9db8e9',
+        titleBg: '#5c88da',
+        todayLine: '#e74c3c',
+        milestone: '#1a3a5c'
     },
 
     COLORS: {

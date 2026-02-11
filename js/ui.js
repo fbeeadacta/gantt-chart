@@ -95,8 +95,6 @@ App.UI = {
         // Aggiungi event listeners per double-click editing
         this.attachGanttListeners(container);
 
-        // Aggiorna stato baseline
-        this.updateBaselineButton();
     },
 
     attachGanttListeners(container) {
@@ -140,15 +138,6 @@ App.UI = {
                 return;
             }
         });
-    },
-
-    updateBaselineButton() {
-        const btn = document.getElementById('btn-toggle-baseline');
-        if (!btn) return;
-        const project = App.getCurrentProject();
-        const hasBaseline = project?.snapshots?.some(s => s.isBaseline);
-        btn.classList.toggle('active', App.state.baselineActive && hasBaseline);
-        btn.disabled = !hasBaseline;
     },
 
     // === MODALS ===
@@ -231,13 +220,13 @@ App.UI = {
         });
     },
 
-    // === Modal: Nuova Fase ===
+    // === Panel: Nuova Fase ===
     showNewPhaseModal() {
         const project = App.getCurrentProject();
         if (!project) return;
         const nextNum = project.phases.length + 1;
 
-        this.showModal('Nuova Fase', `
+        this.showPanel('Nuova Fase', `
             <div class="form-group">
                 <label>Nome fase</label>
                 <input type="text" id="input-phase-name" placeholder="Es. Assessment e Disegno To-Be" class="form-input" />
@@ -254,14 +243,14 @@ App.UI = {
         });
     },
 
-    // === Modal: Modifica Fase ===
+    // === Panel: Modifica Fase ===
     showEditPhaseModal(phaseId) {
         const project = App.getCurrentProject();
         if (!project) return;
         const phase = project.phases.find(p => p.id === phaseId);
         if (!phase) return;
 
-        this.showModal('Modifica Fase', `
+        this.showPanel('Modifica Fase', `
             <div class="form-group">
                 <label>Nome fase</label>
                 <input type="text" id="input-phase-name" value="${this.escapeAttr(phase.name)}" class="form-input" />
@@ -280,7 +269,7 @@ App.UI = {
         });
     },
 
-    // === Modal: Nuova Attività ===
+    // === Panel: Nuova Attività ===
     showNewActivityModal() {
         const project = App.getCurrentProject();
         if (!project) return;
@@ -299,7 +288,7 @@ App.UI = {
         nextMonth.setMonth(nextMonth.getMonth() + 1);
         const nextMonthStr = App.Utils.toISODate(nextMonth);
 
-        this.showModal('Nuova Attività', `
+        this.showPanel('Nuova Attività', `
             <div class="form-group">
                 <label>Fase</label>
                 <select id="input-act-phase" class="form-input">${phaseOptions}</select>
@@ -333,6 +322,13 @@ App.UI = {
                     <span>Milestone di fine (diamante)</span>
                 </label>
             </div>
+            <details class="segments-collapsible">
+                <summary>Segmenti aggiuntivi</summary>
+                <div class="segments-collapsible-body">
+                    <div id="segments-container"></div>
+                    <button type="button" id="btn-add-segment" class="btn btn-secondary" style="margin-top:8px;font-size:12px;">+ Aggiungi segmento</button>
+                </div>
+            </details>
         `, () => {
             const phaseId = document.getElementById('input-act-phase').value;
             const name = document.getElementById('input-act-name').value.trim();
@@ -341,13 +337,42 @@ App.UI = {
             const progress = parseInt(document.getElementById('input-act-progress').value);
             const hasMilestone = document.getElementById('input-act-milestone').checked;
             if (!name) return;
+
+            // Raccolta segmenti
+            const segRows = document.querySelectorAll('#segments-container .segment-row');
+            const segments = [];
+            segRows.forEach(row => {
+                const sd = row.querySelector('.seg-start').value;
+                const ed = row.querySelector('.seg-end').value;
+                const pr = parseInt(row.querySelector('.seg-progress').value) || 0;
+                const incPhase = row.querySelector('.seg-include-phase')?.checked !== false;
+                const hasMil = row.querySelector('.seg-milestone')?.checked || false;
+                if (sd && ed) {
+                    segments.push({ startDate: sd, endDate: ed, progress: pr, includeInPhase: incPhase, hasMilestone: hasMil });
+                }
+            });
+
             addActivity(phaseId, name, startDate, endDate, progress, hasMilestone);
+
+            // Applica segmenti all'attività appena creata
+            if (segments.length > 0) {
+                const project = App.getCurrentProject();
+                const phase = project.phases.find(p => p.id === phaseId);
+                if (phase) {
+                    const act = phase.activities[phase.activities.length - 1];
+                    if (act) {
+                        act.segments = segments;
+                        App.Actions.saveAndRender();
+                    }
+                }
+            }
         });
 
+        this._initSegmentButtons();
         this._initDurationSync();
     },
 
-    // === Modal: Modifica Attività ===
+    // === Panel: Modifica Attività ===
     showEditActivityModal(phaseId, actId) {
         const project = App.getCurrentProject();
         if (!project) return;
@@ -363,7 +388,7 @@ App.UI = {
             `<option value="${p.id}" ${p.id === currentPhaseId ? 'selected' : ''}>${this.escapeHtml(p.name)}</option>`
         ).join('');
 
-        this.showModal('Modifica Attività', `
+        this.showPanel('Modifica Attività', `
             <div class="form-group">
                 <label>Fase</label>
                 <select id="input-act-phase" class="form-input">${phaseOptions}</select>
@@ -397,30 +422,32 @@ App.UI = {
                     <span>Milestone di fine (diamante)</span>
                 </label>
             </div>
-            <div class="form-group" style="border-top:1px solid var(--gray-200); padding-top:12px; margin-top:8px;">
-                <label style="font-weight:600;">Segmenti aggiuntivi</label>
-                <div id="segments-container">
-                    ${(act.segments || []).map((seg, i) => `
-                    <div class="segment-row" style="display:flex;gap:8px;align-items:center;margin-top:8px;flex-wrap:wrap;">
-                        <input type="date" class="form-input seg-start" value="${seg.startDate}" style="flex:1;min-width:120px;" />
-                        <input type="date" class="form-input seg-end" value="${seg.endDate}" style="flex:1;min-width:120px;" />
-                        <input type="number" class="form-input seg-duration" min="1" value="${App.Utils.daysBetween(App.Utils.parseDate(seg.startDate), App.Utils.parseDate(seg.endDate))}" style="width:70px;max-width:70px;" title="Durata (gg)" />
-                        <span style="font-size:11px;white-space:nowrap;" class="seg-pct-label">${seg.progress || 0}%</span>
-                        <input type="range" class="form-range seg-progress" min="0" max="100" value="${seg.progress || 0}" style="flex:0.7;"
-                            oninput="this.previousElementSibling.textContent=this.value+'%'" />
-                        <button type="button" class="btn btn-danger btn-small seg-remove" style="padding:4px 8px;" title="Rimuovi">&times;</button>
-                        <label class="form-checkbox" style="width:100%;margin-top:2px;font-size:11px;">
-                            <input type="checkbox" class="seg-include-phase" ${seg.includeInPhase !== false ? 'checked' : ''} />
-                            <span>Includi nella durata fase</span>
-                        </label>
-                        <label class="form-checkbox" style="width:100%;margin-top:2px;font-size:11px;">
-                            <input type="checkbox" class="seg-milestone" ${seg.hasMilestone ? 'checked' : ''} />
-                            <span>Milestone di fine (diamante)</span>
-                        </label>
-                    </div>`).join('')}
+            <details class="segments-collapsible">
+                <summary>Segmenti aggiuntivi${(act.segments || []).length ? ` (${(act.segments || []).length})` : ''}</summary>
+                <div class="segments-collapsible-body">
+                    <div id="segments-container">
+                        ${(act.segments || []).map((seg, i) => `
+                        <div class="segment-row">
+                            <input type="date" class="form-input seg-start" value="${seg.startDate}" />
+                            <input type="date" class="form-input seg-end" value="${seg.endDate}" />
+                            <input type="number" class="form-input seg-duration" min="1" value="${App.Utils.daysBetween(App.Utils.parseDate(seg.startDate), App.Utils.parseDate(seg.endDate))}" title="Durata (gg)" />
+                            <span class="seg-pct-label">${seg.progress || 0}%</span>
+                            <input type="range" class="form-range seg-progress" min="0" max="100" value="${seg.progress || 0}"
+                                oninput="this.previousElementSibling.textContent=this.value+'%'" />
+                            <button type="button" class="btn btn-danger btn-small seg-remove" title="Rimuovi">&times;</button>
+                            <label class="form-checkbox seg-option">
+                                <input type="checkbox" class="seg-include-phase" ${seg.includeInPhase !== false ? 'checked' : ''} />
+                                <span>Includi nella durata fase</span>
+                            </label>
+                            <label class="form-checkbox seg-option">
+                                <input type="checkbox" class="seg-milestone" ${seg.hasMilestone ? 'checked' : ''} />
+                                <span>Milestone di fine (diamante)</span>
+                            </label>
+                        </div>`).join('')}
+                    </div>
+                    <button type="button" id="btn-add-segment" class="btn btn-secondary" style="margin-top:8px;font-size:12px;">+ Aggiungi segmento</button>
                 </div>
-                <button type="button" id="btn-add-segment" class="btn btn-secondary" style="margin-top:8px;font-size:12px;">+ Aggiungi segmento</button>
-            </div>
+            </details>
         `, () => {
             const newPhaseId = document.getElementById('input-act-phase').value;
             act.name = document.getElementById('input-act-name').value.trim() || act.name;
@@ -524,21 +551,20 @@ App.UI = {
             const defaults = getDefaultDates();
             const row = document.createElement('div');
             row.className = 'segment-row';
-            row.style.cssText = 'display:flex;gap:8px;align-items:center;margin-top:8px;flex-wrap:wrap;';
             const segDuration = App.Utils.daysBetween(App.Utils.parseDate(defaults.start), App.Utils.parseDate(defaults.end));
             row.innerHTML = `
-                <input type="date" class="form-input seg-start" value="${defaults.start}" style="flex:1;min-width:120px;" />
-                <input type="date" class="form-input seg-end" value="${defaults.end}" style="flex:1;min-width:120px;" />
-                <input type="number" class="form-input seg-duration" min="1" value="${segDuration}" style="width:70px;max-width:70px;" title="Durata (gg)" />
-                <span style="font-size:11px;white-space:nowrap;" class="seg-pct-label">0%</span>
-                <input type="range" class="form-range seg-progress" min="0" max="100" value="0" style="flex:0.7;"
+                <input type="date" class="form-input seg-start" value="${defaults.start}" />
+                <input type="date" class="form-input seg-end" value="${defaults.end}" />
+                <input type="number" class="form-input seg-duration" min="1" value="${segDuration}" title="Durata (gg)" />
+                <span class="seg-pct-label">0%</span>
+                <input type="range" class="form-range seg-progress" min="0" max="100" value="0"
                     oninput="this.previousElementSibling.textContent=this.value+'%'" />
-                <button type="button" class="btn btn-danger btn-small seg-remove" style="padding:4px 8px;" title="Rimuovi">&times;</button>
-                <label class="form-checkbox" style="width:100%;margin-top:2px;font-size:11px;">
+                <button type="button" class="btn btn-danger btn-small seg-remove" title="Rimuovi">&times;</button>
+                <label class="form-checkbox seg-option">
                     <input type="checkbox" class="seg-include-phase" checked />
                     <span>Includi nella durata fase</span>
                 </label>
-                <label class="form-checkbox" style="width:100%;margin-top:2px;font-size:11px;">
+                <label class="form-checkbox seg-option">
                     <input type="checkbox" class="seg-milestone" />
                     <span>Milestone di fine (diamante)</span>
                 </label>
@@ -581,11 +607,11 @@ App.UI = {
         });
     },
 
-    // === Modal: Nuova Milestone Steering ===
+    // === Panel: Nuova Milestone Steering ===
     showNewMilestoneModal() {
         const today = App.Utils.toISODate(App.Utils.getToday());
 
-        this.showModal('Nuova Milestone Steering', `
+        this.showPanel('Nuova Milestone Steering', `
             <div class="form-group">
                 <label>Data</label>
                 <input type="date" id="input-ms-date" value="${today}" class="form-input" />
@@ -621,14 +647,14 @@ App.UI = {
         });
     },
 
-    // === Modal: Modifica Milestone Steering ===
+    // === Panel: Modifica Milestone Steering ===
     showEditMilestoneModal(msId) {
         const project = App.getCurrentProject();
         if (!project) return;
         const ms = project.steeringMilestones.find(m => m.id === msId);
         if (!ms) return;
 
-        this.showModal('Modifica Milestone', `
+        this.showPanel('Modifica Milestone', `
             <div class="form-group">
                 <label>Data</label>
                 <input type="date" id="input-ms-date" value="${ms.date}" class="form-input" />
@@ -666,27 +692,13 @@ App.UI = {
         });
     },
 
-    // === Modal: Snapshot ===
-    showNewSnapshotModal() {
-        const today = new Date().toLocaleDateString('it-IT');
-        this.showModal('Crea Snapshot', `
-            <div class="form-group">
-                <label>Nome snapshot</label>
-                <input type="text" id="input-snap-name" value="Snapshot ${today}" class="form-input" />
-            </div>
-        `, () => {
-            const name = document.getElementById('input-snap-name').value.trim();
-            if (!name) return;
-            createSnapshot(name);
-        });
-    },
-
-    // === Modal: Impostazione data "Oggi" ===
+    // === Settings Panel: Impostazione data "Oggi" ===
     showTodaySettingModal() {
         const current = App.state.customToday || '';
         const realToday = App.Utils.toISODate(new Date());
 
-        this.showModal('Imposta data "Oggi"', `
+        const body = document.getElementById('settings-panel-body');
+        body.innerHTML = `
             <div class="form-group">
                 <label>Data di riferimento per la linea "Oggi"</label>
                 <input type="date" id="input-custom-today" value="${current}" class="form-input" />
@@ -694,14 +706,22 @@ App.UI = {
             <div class="form-group" style="font-size:12px; color:var(--gray-500);">
                 Data reale: ${App.Utils.formatDate(realToday)}. Lascia vuoto per usare la data reale.
             </div>
-        `, () => {
+            <div class="settings-actions">
+                <button class="btn btn-primary" id="settings-save-btn">Salva</button>
+            </div>
+        `;
+
+        this.openSettingsPanel('Imposta data "Oggi"');
+
+        document.getElementById('settings-save-btn').onclick = () => {
             const val = document.getElementById('input-custom-today').value;
             App.state.customToday = val || null;
             try { localStorage.setItem('gantt_customToday', val || ''); } catch(e) {}
+            this.closeSettingsPanel();
             if (App.state.currentView === 'gantt') {
                 App.UI.renderGanttView();
             }
-        });
+        };
     },
 
     // === VERSIONS PANEL ===
@@ -711,14 +731,25 @@ App.UI = {
         if (!project) return;
 
         const list = document.getElementById('versions-list');
-        list.innerHTML = '';
+
+        // Form inline per creare snapshot
+        const today = new Date().toLocaleDateString('it-IT');
+        const defaultName = `Snapshot ${today}`;
+        let html = `<div class="snapshot-create-form">
+            <input type="text" id="input-snap-inline" value="${this.escapeAttr(defaultName)}" class="form-input" placeholder="Nome snapshot" />
+            <button class="btn btn-primary" id="btn-snap-inline">Crea</button>
+        </div>`;
 
         const snapshots = (project.snapshots || []).slice().reverse();
 
         if (snapshots.length === 0) {
-            list.innerHTML = '<div class="empty-versions">Nessuno snapshot creato</div>';
+            html += '<div class="empty-versions">Nessuno snapshot creato</div>';
+            list.innerHTML = html;
+            this._initSnapshotInlineForm();
             return;
         }
+
+        list.innerHTML = html;
 
         for (const snap of snapshots) {
             const item = document.createElement('div');
@@ -732,19 +763,38 @@ App.UI = {
                 <div class="version-info">
                     <div class="version-name">${this.escapeHtml(snap.name)}</div>
                     <div class="version-date">${snapDate}</div>
-                    ${snap.isBaseline ? '<div class="version-badge">BASELINE</div>' : ''}
                 </div>
                 <div class="version-actions">
-                    <button class="btn-small ${snap.isBaseline ? 'btn-active' : ''}"
-                        onclick="setBaseline('${snap.id}')" title="Imposta come baseline">
-                        ${snap.isBaseline ? 'Rimuovi baseline' : 'Imposta baseline'}
-                    </button>
+                    <label class="toggle-switch" title="Baseline">
+                        <input type="checkbox" ${snap.isBaseline ? 'checked' : ''} onchange="setBaseline('${snap.id}')" />
+                        <span class="toggle-slider"></span>
+                    </label>
                     <button class="btn-small btn-danger" onclick="deleteSnapshot('${snap.id}')" title="Elimina">
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
                     </button>
                 </div>`;
             list.appendChild(item);
         }
+
+        this._initSnapshotInlineForm();
+    },
+
+    _initSnapshotInlineForm() {
+        const btn = document.getElementById('btn-snap-inline');
+        const input = document.getElementById('input-snap-inline');
+        if (!btn || !input) return;
+
+        const doCreate = () => {
+            const name = input.value.trim();
+            if (!name) return;
+            createSnapshot(name);
+            this.renderVersionsPanel();
+        };
+
+        btn.addEventListener('click', doCreate);
+        input.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') doCreate();
+        });
     },
 
     toggleVersionsPanel() {
@@ -784,6 +834,141 @@ App.UI = {
         } else if (view === 'gantt') {
             this.renderGanttView();
         }
+    },
+
+    // === THEME ===
+    _getTheme() {
+        return { ...App.DEFAULTS_THEME, ...App.state.theme };
+    },
+
+    showThemeSettingsModal() {
+        const T = this._getTheme();
+
+        const fonts = [
+            'Arial, sans-serif',
+            "'Segoe UI', Arial, sans-serif",
+            'Calibri, sans-serif',
+            'Helvetica, sans-serif',
+            'Verdana, sans-serif',
+            'Tahoma, sans-serif',
+            'Georgia, serif',
+            "'Times New Roman', serif"
+        ];
+        const fontOptions = fonts.map(f => {
+            const label = f.split(',')[0].replace(/'/g, '');
+            return `<option value="${this.escapeAttr(f)}" ${T.fontFamily === f ? 'selected' : ''} style="font-family:${f}">${label}</option>`;
+        }).join('');
+
+        const colorFields = [
+            { key: 'activityBg', label: 'Barra attività (sfondo)' },
+            { key: 'activityFill', label: 'Barra attività (avanzamento)' },
+            { key: 'phaseFill', label: 'Barra fase sommario' },
+            { key: 'headerBg', label: 'Header anno (sfondo)' },
+            { key: 'phaseLabelBg', label: 'Etichetta fase (sfondo)' },
+            { key: 'titleBg', label: 'Colonna titolo (sfondo)' },
+            { key: 'todayLine', label: 'Linea oggi' },
+            { key: 'milestone', label: 'Milestone attività' }
+        ];
+
+        const colorInputs = colorFields.map(f => `
+            <div class="theme-color-row">
+                <input type="color" id="theme-${f.key}" value="${T[f.key]}" />
+                <label for="theme-${f.key}">${f.label}</label>
+            </div>
+        `).join('');
+
+        const body = document.getElementById('settings-panel-body');
+        body.innerHTML = `
+            <div class="form-group">
+                <label>Font</label>
+                <select id="theme-fontFamily" class="form-input" style="font-family:${T.fontFamily}"
+                    onchange="this.style.fontFamily=this.value">${fontOptions}</select>
+            </div>
+            <div style="border-top:1px solid var(--gray-200);padding-top:12px;margin-top:8px;">
+                <label style="font-weight:600;margin-bottom:10px;display:block;">Colori</label>
+                ${colorInputs}
+            </div>
+            <div class="settings-actions">
+                <button class="btn btn-primary" id="settings-save-btn">Salva</button>
+                <button class="btn btn-secondary" id="settings-reset-btn">Ripristina default</button>
+            </div>
+        `;
+
+        this.openSettingsPanel('Impostazioni Tema');
+
+        document.getElementById('settings-save-btn').onclick = () => {
+            const theme = {};
+            const defaults = App.DEFAULTS_THEME;
+
+            const font = document.getElementById('theme-fontFamily').value;
+            if (font !== defaults.fontFamily) theme.fontFamily = font;
+
+            for (const f of colorFields) {
+                const val = document.getElementById('theme-' + f.key).value;
+                if (val !== defaults[f.key]) theme[f.key] = val;
+            }
+
+            App.state.theme = theme;
+            try { localStorage.setItem('gantt_theme', JSON.stringify(theme)); } catch(e) {}
+
+            this.closeSettingsPanel();
+            if (App.state.currentView === 'gantt') {
+                App.UI.renderGanttView();
+            }
+        };
+
+        document.getElementById('settings-reset-btn').onclick = () => {
+            App.state.theme = {};
+            try { localStorage.removeItem('gantt_theme'); } catch(e) {}
+            this.closeSettingsPanel();
+            if (App.state.currentView === 'gantt') {
+                App.UI.renderGanttView();
+            }
+        };
+    },
+
+    // === SETTINGS PANEL (generico) ===
+    showPanel(title, content, onSave, onDelete) {
+        const body = document.getElementById('settings-panel-body');
+
+        let footer = '<div class="settings-actions">';
+        if (onSave) {
+            footer += '<button class="btn btn-primary" id="panel-save-btn">Salva</button>';
+        }
+        if (onDelete) {
+            footer += '<button class="btn btn-danger" id="panel-delete-btn">Elimina</button>';
+        }
+        footer += '</div>';
+
+        body.innerHTML = content + footer;
+
+        this.openSettingsPanel(title);
+
+        if (onSave) {
+            document.getElementById('panel-save-btn').onclick = () => {
+                onSave();
+                this.closeSettingsPanel();
+            };
+        }
+        if (onDelete) {
+            document.getElementById('panel-delete-btn').onclick = () => {
+                if (confirm('Sei sicuro di voler eliminare questo elemento?')) {
+                    onDelete();
+                    this.closeSettingsPanel();
+                }
+            };
+        }
+    },
+
+    openSettingsPanel(title) {
+        document.getElementById('settings-panel-title').textContent = title;
+        document.getElementById('settings-panel').classList.add('open');
+        document.getElementById('settings-backdrop').classList.add('visible');
+    },
+
+    closeSettingsPanel() {
+        document.getElementById('settings-panel').classList.remove('open');
+        document.getElementById('settings-backdrop').classList.remove('visible');
     },
 
     // === HELPERS ===

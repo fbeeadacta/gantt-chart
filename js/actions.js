@@ -189,20 +189,5 @@ App.Actions = {
         this.saveAndRender();
         App.UI.renderVersionsPanel();
         App.UI.toast('Snapshot eliminato');
-    },
-
-    toggleBaseline() {
-        const project = App.getCurrentProject();
-        if (!project) return;
-
-        const hasBaseline = project.snapshots?.some(s => s.isBaseline);
-        if (!hasBaseline) {
-            App.UI.toast('Nessuna baseline impostata. Crea uno snapshot e impostalo come baseline.', 'warning');
-            return;
-        }
-
-        App.state.baselineActive = !App.state.baselineActive;
-        App.UI.renderGanttView();
-        App.UI.toast(App.state.baselineActive ? 'Baseline visibile' : 'Baseline nascosta');
     }
 };

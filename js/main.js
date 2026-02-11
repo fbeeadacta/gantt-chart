@@ -10,6 +10,12 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (saved) App.state.customToday = saved;
     } catch(e) {}
 
+    // Ripristina tema da localStorage
+    try {
+        const savedTheme = localStorage.getItem('gantt_theme');
+        if (savedTheme) App.state.theme = JSON.parse(savedTheme);
+    } catch(e) {}
+
     // Tenta riconnessione alla cartella
     if (App.state.fsAccessSupported) {
         await App.Workspace.reconnect();
@@ -17,6 +23,21 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // Carica progetti
     App.state.projects = await App.Storage.loadAll();
+
+    // Ripristina stato tools panel
+    try {
+        if (localStorage.getItem('gantt_toolsPanelCollapsed') === '1') {
+            const tp = document.getElementById('tools-panel');
+            if (tp) {
+                tp.classList.add('collapsed');
+                const btn = document.getElementById('tools-panel-toggle');
+                if (btn) {
+                    btn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>';
+                    btn.title = 'Espandi pannello';
+                }
+            }
+        }
+    } catch(e) {}
 
     // Mostra dashboard
     App.UI.showView('dashboard');
@@ -135,6 +156,31 @@ function showTodaySettingModal() {
     App.UI.showTodaySettingModal();
 }
 
+function showThemeSettingsModal() {
+    App.UI.showThemeSettingsModal();
+}
+
+function closeSettingsPanel() {
+    App.UI.closeSettingsPanel();
+}
+
+function toggleToolsPanel() {
+    const panel = document.getElementById('tools-panel');
+    const btn = document.getElementById('tools-panel-toggle');
+    if (!panel) return;
+    const collapsed = panel.classList.toggle('collapsed');
+    if (btn) {
+        if (collapsed) {
+            btn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>';
+            btn.title = 'Espandi pannello';
+        } else {
+            btn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>';
+            btn.title = 'Comprimi pannello';
+        }
+    }
+    try { localStorage.setItem('gantt_toolsPanelCollapsed', collapsed ? '1' : '0'); } catch(e) {}
+}
+
 // Export
 function exportSVG() {
     App.Exporter.exportSVG();
@@ -145,10 +191,6 @@ function exportPNG() {
 }
 
 // Versioning
-function showNewSnapshotModal() {
-    App.UI.showNewSnapshotModal();
-}
-
 function createSnapshot(name) {
     App.Actions.createSnapshot(name);
 }
@@ -167,16 +209,15 @@ function deleteSnapshot(snapId) {
     }
 }
 
-function toggleBaseline() {
-    App.Actions.toggleBaseline();
-}
-
 // Keyboard shortcut: Escape chiude modale
 document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {
         closeModal();
         if (App.state.versionsPanelOpen) {
             App.UI.toggleVersionsPanel();
+        }
+        if (document.getElementById('settings-panel').classList.contains('open')) {
+            App.UI.closeSettingsPanel();
         }
     }
 });

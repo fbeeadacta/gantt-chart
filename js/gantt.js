@@ -7,6 +7,10 @@ App.Gantt = {
         const G = App.GANTT;
         const C = App.COLORS;
 
+        // Theme
+        this._theme = App.UI._getTheme();
+        const T = this._theme;
+
         // Calcolo layout
         const layout = this.computeLayout(project);
         const defaultHeight = Math.max(G.height, layout.totalHeight + G.padding.bottom);
@@ -21,7 +25,7 @@ App.Gantt = {
         svg.setAttribute('width', svgWidth);
         svg.setAttribute('height', totalHeight);
         svg.setAttribute('xmlns', this.ns);
-        svg.style.fontFamily = "'Segoe UI', Arial, sans-serif";
+        svg.style.fontFamily = T.fontFamily;
         svg.style.backgroundColor = C.white;
 
         // Defs: filtro ombra per hover
@@ -239,12 +243,13 @@ App.Gantt = {
     renderHeader(svg, layout) {
         const G = App.GANTT;
         const C = App.COLORS;
+        const T = this._theme;
         const headerY = layout.headerY;
 
         // Sfondo header anno (riga superiore)
         const yearRowH = G.headerHeight / 2;
         const monthRowH = G.headerHeight / 2;
-        this.rect(svg, layout.timelineX, headerY, layout.timelineWidth, yearRowH, C.headerBg);
+        this.rect(svg, layout.timelineX, headerY, layout.timelineWidth, yearRowH, T.headerBg);
         // Sfondo header mesi (riga inferiore)
         this.rect(svg, layout.timelineX, headerY + yearRowH, layout.timelineWidth, monthRowH, C.headerMonthBg);
 
@@ -297,6 +302,7 @@ App.Gantt = {
     renderLeftPanel(svg, project, layout) {
         const G = App.GANTT;
         const C = App.COLORS;
+        const T = this._theme;
         const panelW = layout.timelineX;
 
         // Sfondo pannello sinistro header — bianco (l'header blu è solo sulla timeline)
@@ -320,7 +326,7 @@ App.Gantt = {
             const titleEndY = lastPhase.endY;
             const titleH = titleEndY - titleStartY;
 
-            this.rect(svg, G.padding.left, titleStartY, G.titleColWidth, titleH, '#5c88da');
+            this.rect(svg, G.padding.left, titleStartY, G.titleColWidth, titleH, T.titleBg);
             this.verticalText(svg, titleX, titleStartY + titleH / 2,
                 project.title.toUpperCase(), 10, C.white, 'bold');
         }
@@ -335,7 +341,7 @@ App.Gantt = {
             const phaseH = pl.endY - pl.startY;
 
             // Sfondo azzurro chiaro etichetta fase
-            this.rect(svg, phaseColX, pl.startY, G.phaseLabelWidth, phaseH, '#9db8e9');
+            this.rect(svg, phaseColX, pl.startY, G.phaseLabelWidth, phaseH, T.phaseLabelBg);
 
             // Etichetta fase (verticale)
             this.verticalText(svg, phaseLabelX, pl.startY + phaseH / 2,
@@ -488,6 +494,7 @@ App.Gantt = {
     renderPhases(svg, project, layout) {
         const G = App.GANTT;
         const C = App.COLORS;
+        const T = this._theme;
 
         for (const pl of layout.phaseLayouts) {
             const phase = pl.phase;
@@ -501,11 +508,11 @@ App.Gantt = {
                 const barW = Math.max(x2 - x1, 4);
 
                 // Barra scura
-                this.rect(svg, x1, barY, barW, G.summaryBarHeight, C.primary, phase.id);
+                this.rect(svg, x1, barY, barW, G.summaryBarHeight, T.phaseFill, phase.id);
 
                 // Triangolini alle estremità
-                this.summaryTriangle(svg, x1, barY + G.summaryBarHeight, 'left', C.primary);
-                this.summaryTriangle(svg, x1 + barW, barY + G.summaryBarHeight, 'right', C.primary);
+                this.summaryTriangle(svg, x1, barY + G.summaryBarHeight, 'left', T.phaseFill);
+                this.summaryTriangle(svg, x1 + barW, barY + G.summaryBarHeight, 'right', T.phaseFill);
             }
 
             // Barre attività
@@ -526,7 +533,7 @@ App.Gantt = {
                 svg.appendChild(g);
 
                 // Sfondo azzurro chiaro (durata totale)
-                const bgRect = this.rect(g, x1, barY, barW, G.barHeight, C.primaryLight, null, 3);
+                const bgRect = this.rect(g, x1, barY, barW, G.barHeight, T.activityBg, null, 3);
                 bgRect.setAttribute('data-bar-role', 'background');
                 bgRect.setAttribute('data-bar-act', act.id);
 
@@ -534,7 +541,7 @@ App.Gantt = {
                 const progress = (act.progress || 0) / 100;
                 if (progress > 0) {
                     const progressW = barW * progress;
-                    const progRect = this.rect(g, x1, barY, progressW, G.barHeight, C.primary, null, 3);
+                    const progRect = this.rect(g, x1, barY, progressW, G.barHeight, T.activityFill, null, 3);
                     progRect.setAttribute('data-bar-role', 'progress');
                     progRect.setAttribute('data-bar-act', act.id);
                 }
@@ -542,7 +549,7 @@ App.Gantt = {
                 // Percentuale avanzamento
                 if (act.progress > 0) {
                     const pctText = this.text(g, x1 + barW + 5, al.y + G.activityRowHeight / 2 + 3.5,
-                        act.progress + '%', 8, C.primary, 'start', '600');
+                        act.progress + '%', 8, T.activityFill, 'start', '600');
                     pctText.setAttribute('data-bar-role', 'pct');
                     pctText.setAttribute('data-bar-act', act.id);
                 }
@@ -571,7 +578,7 @@ App.Gantt = {
                 // Milestone diamante alla fine
                 if (act.hasMilestone) {
                     this.diamond(g, x2, al.y + G.activityRowHeight / 2,
-                        G.milestoneSize - 2, C.primary);
+                        G.milestoneSize - 2, T.milestone);
                 }
 
                 // Segmenti aggiuntivi
@@ -591,7 +598,7 @@ App.Gantt = {
                         svg.appendChild(sg);
 
                         // Sfondo
-                        const segBg = this.rect(sg, sx1, barY, segW, G.barHeight, C.primaryLight, null, 3);
+                        const segBg = this.rect(sg, sx1, barY, segW, G.barHeight, T.activityBg, null, 3);
                         segBg.setAttribute('data-bar-role', 'background');
                         segBg.setAttribute('data-bar-act', act.id);
                         segBg.setAttribute('data-bar-seg', String(segIdx));
@@ -600,7 +607,7 @@ App.Gantt = {
                         const segProgress = (seg.progress || 0) / 100;
                         if (segProgress > 0) {
                             const segProgW = segW * segProgress;
-                            const segProgRect = this.rect(sg, sx1, barY, segProgW, G.barHeight, C.primary, null, 3);
+                            const segProgRect = this.rect(sg, sx1, barY, segProgW, G.barHeight, T.activityFill, null, 3);
                             segProgRect.setAttribute('data-bar-role', 'progress');
                             segProgRect.setAttribute('data-bar-act', act.id);
                             segProgRect.setAttribute('data-bar-seg', String(segIdx));
@@ -609,7 +616,7 @@ App.Gantt = {
                         // Percentuale
                         if (seg.progress > 0) {
                             const segPctText = this.text(sg, sx1 + segW + 5, al.y + G.activityRowHeight / 2 + 3.5,
-                                seg.progress + '%', 8, C.primary, 'start', '600');
+                                seg.progress + '%', 8, T.activityFill, 'start', '600');
                             segPctText.setAttribute('data-bar-role', 'pct');
                             segPctText.setAttribute('data-bar-act', act.id);
                             segPctText.setAttribute('data-bar-seg', String(segIdx));
@@ -642,7 +649,7 @@ App.Gantt = {
                         // Milestone diamante alla fine del segmento
                         if (seg.hasMilestone) {
                             this.diamond(sg, sx2, al.y + G.activityRowHeight / 2,
-                                G.milestoneSize - 2, C.primary);
+                                G.milestoneSize - 2, T.milestone);
                         }
                     }
                 }
@@ -653,15 +660,16 @@ App.Gantt = {
     // === TODAY LINE ===
     renderTodayLine(svg, layout) {
         const G = App.GANTT;
+        const T = this._theme;
         const today = App.Utils.getToday();
 
         if (today >= layout.range.start && today <= layout.range.end) {
             const x = this.dateToX(today, layout);
             const topY = layout.headerY + G.headerHeight;
-            this.line(svg, x, topY, x, layout.totalHeight, App.COLORS.red, 2);
+            this.line(svg, x, topY, x, layout.totalHeight, T.todayLine, 2);
 
             // Etichetta "Oggi" sotto la tabella
-            this.text(svg, x, layout.totalHeight + 12, 'Oggi', 8, App.COLORS.red, 'middle', 'bold');
+            this.text(svg, x, layout.totalHeight + 12, 'Oggi', 8, T.todayLine, 'middle', 'bold');
         }
     },
 
@@ -687,7 +695,7 @@ App.Gantt = {
 
                 const x1 = this.dateToX(startDate, layout);
                 const x2 = this.dateToX(endDate, layout);
-                const barY = al.y + (G.activityRowHeight - G.barHeight) / 2 - 2;
+                const barY = al.y + (G.activityRowHeight - G.barHeight) / 2;
                 const barW = Math.max(x2 - x1, 4);
 
                 // Barra fantasma tratteggiata
@@ -806,7 +814,7 @@ App.Gantt = {
         t.setAttribute('fill', fill);
         t.setAttribute('text-anchor', anchor || 'start');
         t.setAttribute('font-weight', weight || 'normal');
-        t.setAttribute('font-family', "'Segoe UI', Arial, sans-serif");
+        t.setAttribute('font-family', this._theme ? this._theme.fontFamily : 'Arial, sans-serif');
         if (italic) t.setAttribute('font-style', 'italic');
 
         const lineH = Math.round(size * 1.3);
@@ -832,7 +840,7 @@ App.Gantt = {
         t.setAttribute('fill', fill);
         t.setAttribute('text-anchor', anchor || 'start');
         t.setAttribute('font-weight', weight || 'normal');
-        t.setAttribute('font-family', "'Segoe UI', Arial, sans-serif");
+        t.setAttribute('font-family', this._theme ? this._theme.fontFamily : 'Arial, sans-serif');
         if (italic) t.setAttribute('font-style', 'italic');
         t.textContent = content;
         svg.appendChild(t);
