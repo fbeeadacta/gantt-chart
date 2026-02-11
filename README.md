@@ -4,6 +4,10 @@ Web app per creare diagrammi di Gantt di progetto, ottimizzati per l'export come
 
 ![HTML5](https://img.shields.io/badge/HTML5-vanilla-orange) ![JavaScript](https://img.shields.io/badge/JS-ES2020+-yellow) ![Zero Build](https://img.shields.io/badge/build-zero-green)
 
+## Demo
+
+**https://fbeeadacta.github.io/gantt-chart/**
+
 ## Quick Start
 
 Aprire `index.html` in **Chrome** o **Edge**. Nessun server, nessuna installazione, funziona anche da `file://`.
