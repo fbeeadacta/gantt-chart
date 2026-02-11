@@ -317,6 +317,10 @@ App.UI = {
                     <label>Data fine</label>
                     <input type="date" id="input-act-end" value="${nextMonthStr}" class="form-input" />
                 </div>
+                <div class="form-group">
+                    <label>Durata (gg)</label>
+                    <input type="number" id="input-act-duration" min="1" value="${App.Utils.daysBetween(App.Utils.parseDate(today), nextMonth)}" class="form-input" style="max-width:90px;" />
+                </div>
             </div>
             <div class="form-group">
                 <label>Avanzamento: <span id="progress-val">0</span>%</label>
@@ -339,6 +343,8 @@ App.UI = {
             if (!name) return;
             addActivity(phaseId, name, startDate, endDate, progress, hasMilestone);
         });
+
+        this._initDurationSync();
     },
 
     // === Modal: Modifica Attività ===
@@ -375,6 +381,10 @@ App.UI = {
                     <label>Data fine</label>
                     <input type="date" id="input-act-end" value="${act.endDate}" class="form-input" />
                 </div>
+                <div class="form-group">
+                    <label>Durata (gg)</label>
+                    <input type="number" id="input-act-duration" min="1" value="${App.Utils.daysBetween(App.Utils.parseDate(act.startDate), App.Utils.parseDate(act.endDate))}" class="form-input" style="max-width:90px;" />
+                </div>
             </div>
             <div class="form-group">
                 <label>Avanzamento: <span id="progress-val">${act.progress || 0}</span>%</label>
@@ -394,6 +404,7 @@ App.UI = {
                     <div class="segment-row" style="display:flex;gap:8px;align-items:center;margin-top:8px;flex-wrap:wrap;">
                         <input type="date" class="form-input seg-start" value="${seg.startDate}" style="flex:1;min-width:120px;" />
                         <input type="date" class="form-input seg-end" value="${seg.endDate}" style="flex:1;min-width:120px;" />
+                        <input type="number" class="form-input seg-duration" min="1" value="${App.Utils.daysBetween(App.Utils.parseDate(seg.startDate), App.Utils.parseDate(seg.endDate))}" style="width:70px;max-width:70px;" title="Durata (gg)" />
                         <span style="font-size:11px;white-space:nowrap;" class="seg-pct-label">${seg.progress || 0}%</span>
                         <input type="range" class="form-range seg-progress" min="0" max="100" value="${seg.progress || 0}" style="flex:0.7;"
                             oninput="this.previousElementSibling.textContent=this.value+'%'" />
@@ -453,6 +464,36 @@ App.UI = {
 
         // Wire up segment add/remove buttons
         this._initSegmentButtons();
+        this._initDurationSync();
+    },
+
+    _initDurationSync() {
+        const startInput = document.getElementById('input-act-start');
+        const endInput = document.getElementById('input-act-end');
+        const durationInput = document.getElementById('input-act-duration');
+        if (!startInput || !endInput || !durationInput) return;
+
+        const syncDuration = () => {
+            const start = App.Utils.parseDate(startInput.value);
+            const end = App.Utils.parseDate(endInput.value);
+            if (start && end) {
+                durationInput.value = App.Utils.daysBetween(start, end);
+            }
+        };
+
+        const syncEndDate = () => {
+            const start = App.Utils.parseDate(startInput.value);
+            const days = parseInt(durationInput.value);
+            if (start && days > 0) {
+                const end = new Date(start);
+                end.setDate(end.getDate() + days);
+                endInput.value = App.Utils.toISODate(end);
+            }
+        };
+
+        startInput.addEventListener('change', syncEndDate);
+        endInput.addEventListener('change', syncDuration);
+        durationInput.addEventListener('change', syncEndDate);
     },
 
     _initSegmentButtons() {
@@ -484,9 +525,11 @@ App.UI = {
             const row = document.createElement('div');
             row.className = 'segment-row';
             row.style.cssText = 'display:flex;gap:8px;align-items:center;margin-top:8px;flex-wrap:wrap;';
+            const segDuration = App.Utils.daysBetween(App.Utils.parseDate(defaults.start), App.Utils.parseDate(defaults.end));
             row.innerHTML = `
                 <input type="date" class="form-input seg-start" value="${defaults.start}" style="flex:1;min-width:120px;" />
                 <input type="date" class="form-input seg-end" value="${defaults.end}" style="flex:1;min-width:120px;" />
+                <input type="number" class="form-input seg-duration" min="1" value="${segDuration}" style="width:70px;max-width:70px;" title="Durata (gg)" />
                 <span style="font-size:11px;white-space:nowrap;" class="seg-pct-label">0%</span>
                 <input type="range" class="form-range seg-progress" min="0" max="100" value="0" style="flex:0.7;"
                     oninput="this.previousElementSibling.textContent=this.value+'%'" />
@@ -510,6 +553,30 @@ App.UI = {
                 e.stopPropagation();
                 const row = removeBtn.closest('.segment-row');
                 if (row) row.remove();
+            }
+        });
+
+        // Event delegation per sync durata segmenti
+        container.addEventListener('change', (e) => {
+            const row = e.target.closest('.segment-row');
+            if (!row) return;
+            const segStart = row.querySelector('.seg-start');
+            const segEnd = row.querySelector('.seg-end');
+            const segDur = row.querySelector('.seg-duration');
+            if (!segStart || !segEnd || !segDur) return;
+
+            if (e.target === segEnd) {
+                const s = App.Utils.parseDate(segStart.value);
+                const ed = App.Utils.parseDate(segEnd.value);
+                if (s && ed) segDur.value = App.Utils.daysBetween(s, ed);
+            } else if (e.target === segStart || e.target === segDur) {
+                const s = App.Utils.parseDate(segStart.value);
+                const days = parseInt(segDur.value);
+                if (s && days > 0) {
+                    const ed = new Date(s);
+                    ed.setDate(ed.getDate() + days);
+                    segEnd.value = App.Utils.toISODate(ed);
+                }
             }
         });
     },
