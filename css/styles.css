@@ -1,10 +1,10 @@
 /* styles.css - Gantt Project Manager */
 
 :root {
-    --primary: #1a3a5c;
-    --primary-hover: #15304d;
-    --primary-light: #a8c8e8;
-    --primary-lighter: #e0e9f7;
+    --primary: #5c88da;
+    --primary-hover: #4a73c4;
+    --primary-light: #a3bee8;
+    --primary-lighter: #e4ecf7;
     --success: #10b981;
     --warning: #f59e0b;
     --danger: #ef4444;
@@ -49,9 +49,10 @@ body {
     align-items: center;
     gap: 8px;
     padding: 10px 20px;
-    background: var(--primary);
-    color: white;
-    box-shadow: var(--shadow-md);
+    background: white;
+    color: var(--primary);
+    border-bottom: 1px solid var(--gray-200);
+    box-shadow: var(--shadow-sm);
     position: sticky;
     top: 0;
     z-index: 100;
@@ -68,13 +69,13 @@ body {
 .toolbar-separator {
     width: 1px;
     height: 24px;
-    background: rgba(255,255,255,0.25);
+    background: var(--gray-200);
     margin: 0 4px;
 }
 
 .toolbar-title {
     font-size: 14px;
-    opacity: 0.9;
+    color: var(--gray-700);
     flex: 1;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -83,26 +84,18 @@ body {
 }
 
 .toolbar-title:hover {
-    opacity: 1;
+    color: var(--primary);
     text-decoration: underline;
 }
 
 .toolbar .btn {
-    color: white;
-    background: transparent;
-    border-color: rgba(255,255,255,0.3);
     font-size: 12px;
     padding: 6px 12px;
 }
 
-.toolbar .btn:hover {
-    background: rgba(255,255,255,0.15);
-    border-color: rgba(255,255,255,0.5);
-}
-
 .toolbar .btn.active {
-    background: rgba(255,255,255,0.25);
-    border-color: rgba(255,255,255,0.6);
+    background: var(--primary-lighter);
+    border-color: var(--primary-light);
 }
 
 /* === BUTTONS === */
@@ -125,7 +118,8 @@ body {
 
 .btn:hover {
     background: var(--gray-50);
-    border-color: var(--gray-400);
+    border-color: var(--primary-light);
+    color: var(--primary);
 }
 
 .btn-primary {
@@ -212,21 +206,103 @@ body {
 
 /* === DASHBOARD === */
 #dashboard-view {
-    padding: 24px;
+}
+
+/* Dashboard content: "paper on desk" effect — full height, no rounding */
+.dashboard-content {
     max-width: 1200px;
     margin: 0 auto;
+    padding: 24px;
+    background: white;
+    box-shadow: 4px 0 12px rgba(0,0,0,0.06), -4px 0 12px rgba(0,0,0,0.06);
+    min-height: calc(100vh - 49px);
 }
 
 .dashboard-header {
     display: flex;
     align-items: center;
-    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 12px;
     margin-bottom: 20px;
 }
 
 .dashboard-header h2 {
     font-size: 20px;
     color: var(--gray-800);
+    white-space: nowrap;
+}
+
+.dashboard-controls {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex: 1;
+    min-width: 0;
+}
+
+.dashboard-search {
+    position: relative;
+    flex: 1;
+    min-width: 140px;
+    max-width: 260px;
+}
+
+.dashboard-search .search-icon {
+    position: absolute;
+    left: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--gray-400);
+    pointer-events: none;
+}
+
+.dashboard-search .form-input {
+    padding-left: 32px;
+    font-size: 13px;
+    height: 36px;
+}
+
+.dashboard-controls > select.form-input {
+    width: auto;
+    min-width: 140px;
+    font-size: 13px;
+    height: 36px;
+    padding: 0 10px;
+}
+
+.view-toggle {
+    display: flex;
+    border: 1px solid var(--gray-300);
+    border-radius: var(--radius-sm);
+    overflow: hidden;
+}
+
+.view-toggle-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 34px;
+    padding: 0;
+    border: none;
+    background: white;
+    color: var(--gray-400);
+    cursor: pointer;
+    transition: var(--transition);
+}
+
+.view-toggle-btn:not(:last-child) {
+    border-right: 1px solid var(--gray-300);
+}
+
+.view-toggle-btn:hover {
+    background: var(--gray-50);
+    color: var(--gray-600);
+}
+
+.view-toggle-btn.active {
+    background: var(--primary);
+    color: white;
 }
 
 .dashboard-actions {
@@ -235,36 +311,47 @@ body {
 }
 
 #workspace-status {
-    margin-bottom: 16px;
-    font-size: 13px;
+    position: fixed;
+    bottom: 16px;
+    right: 16px;
+    z-index: 50;
 }
 
-.status-ok {
-    color: var(--success);
-    padding: 6px 12px;
-    background: #ecfdf5;
-    border-radius: var(--radius-sm);
-    display: inline-block;
+.workspace-status-btn {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    border: 1px solid var(--gray-200);
+    border-radius: 50%;
+    background: white;
+    cursor: pointer;
+    box-shadow: var(--shadow-md);
+    transition: var(--transition);
 }
 
-.status-warning {
-    color: var(--warning);
-    padding: 6px 12px;
-    background: #fffbeb;
-    border-radius: var(--radius-sm);
-    display: inline-block;
+.workspace-status-btn:hover {
+    box-shadow: var(--shadow-lg);
+    transform: scale(1.05);
 }
 
-.status-info {
-    color: var(--gray-500);
-    padding: 6px 12px;
-    background: var(--gray-100);
-    border-radius: var(--radius-sm);
-    display: inline-block;
+.workspace-status-dot {
+    position: absolute;
+    top: 2px;
+    right: 2px;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    border: 2px solid white;
 }
 
 /* === PROJECT CARDS === */
 #project-grid {
+}
+
+.project-grid-view {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
     gap: 16px;
@@ -293,16 +380,30 @@ body {
     margin-bottom: 16px;
 }
 
+.card-title-group {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    min-width: 0;
+    flex: 1;
+}
+
 .card-title {
     font-size: 16px;
     font-weight: 600;
-    color: var(--primary);
+    color: var(--gray-800);
+}
+
+.card-client {
+    font-size: 12px;
+    color: var(--gray-500);
 }
 
 .card-actions {
     display: flex;
     gap: 4px;
 }
+
 
 .card-body {
     display: flex;
@@ -323,6 +424,201 @@ body {
 .stat-value {
     font-weight: 500;
     color: var(--gray-700);
+}
+
+/* === Phase progress circles row === */
+.card-phases-row {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    padding-top: 4px;
+}
+
+.phase-circle {
+    flex-shrink: 0;
+    cursor: default;
+}
+
+/* === STATUS BADGE === */
+.status-badge {
+    display: inline-block;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 10px;
+    line-height: 1.4;
+    white-space: nowrap;
+}
+
+.status-badge-green {
+    color: #065f46;
+    background: #ecfdf5;
+    border: 1px solid #a7f3d0;
+}
+
+.status-badge-blue {
+    color: #1e40af;
+    background: #eff6ff;
+    border: 1px solid #bfdbfe;
+}
+
+.status-badge-red {
+    color: #991b1b;
+    background: #fef2f2;
+    border: 1px solid #fecaca;
+}
+
+.status-badge-gray {
+    color: var(--gray-600);
+    background: var(--gray-100);
+    border: 1px solid var(--gray-300);
+}
+
+/* === CARD PROGRESS BAR === */
+.card-progress {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px solid var(--gray-100);
+}
+
+.card-progress-bar {
+    flex: 1;
+    height: 6px;
+    background: var(--gray-200);
+    border-radius: 3px;
+    overflow: hidden;
+}
+
+.card-progress-fill {
+    display: block;
+    height: 100%;
+    background: var(--primary);
+    border-radius: 3px;
+    transition: width 0.3s ease;
+}
+
+.card-progress-label {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--gray-600);
+    min-width: 32px;
+    text-align: right;
+}
+
+/* === PROJECT LIST VIEW === */
+.project-list-view {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    border: 1px solid var(--gray-200);
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+    background: white;
+}
+
+.project-list-header {
+    display: grid;
+    grid-template-columns: 1.5fr 1fr 100px 140px 1.2fr 60px 70px 130px 100px;
+    gap: 8px;
+    padding: 10px 16px;
+    background: var(--gray-50);
+    border-bottom: 1px solid var(--gray-200);
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--gray-500);
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+}
+
+.project-list-row {
+    display: grid;
+    grid-template-columns: 1.5fr 1fr 100px 140px 1.2fr 60px 70px 130px 100px;
+    gap: 8px;
+    padding: 12px 16px;
+    align-items: center;
+    border-bottom: 1px solid var(--gray-100);
+    cursor: pointer;
+    transition: var(--transition);
+    font-size: 13px;
+    color: var(--gray-700);
+}
+
+.project-list-row:last-child {
+    border-bottom: none;
+}
+
+.project-list-row:hover {
+    background: var(--gray-50);
+}
+
+.list-col-name {
+    font-weight: 600;
+    color: var(--primary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.list-col-client {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 13px;
+    color: var(--gray-500);
+}
+
+.list-col-status {
+    display: flex;
+    align-items: center;
+}
+
+.list-col-progress {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.list-progress-bar {
+    flex: 1;
+    height: 6px;
+    background: var(--gray-200);
+    border-radius: 3px;
+    overflow: hidden;
+}
+
+.list-progress-label {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--gray-600);
+    min-width: 28px;
+    text-align: right;
+}
+
+.list-col-period {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 12px;
+}
+
+.list-col-phases,
+.list-col-acts {
+    text-align: center;
+    font-weight: 500;
+}
+
+.list-col-updated {
+    font-size: 12px;
+    color: var(--gray-500);
+}
+
+.list-col-actions {
+    display: flex;
+    gap: 2px;
+    justify-content: flex-end;
 }
 
 .empty-state {
@@ -800,6 +1096,93 @@ body {
     border: 1px solid #fde68a;
 }
 
+/* === SETTINGS MENU === */
+.settings-menu {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.settings-menu-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    width: 100%;
+    padding: 12px;
+    border: 1px solid var(--gray-200);
+    border-radius: var(--radius-md);
+    background: white;
+    cursor: pointer;
+    transition: var(--transition);
+    text-align: left;
+    font-family: inherit;
+}
+
+.settings-menu-item:hover {
+    background: var(--gray-50);
+    border-color: var(--primary-light);
+}
+
+.settings-menu-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    border-radius: var(--radius-sm);
+    background: var(--gray-100);
+    color: var(--gray-600);
+    flex-shrink: 0;
+}
+
+.settings-menu-item:hover .settings-menu-icon {
+    background: var(--primary-lighter);
+    color: var(--primary);
+}
+
+.settings-menu-text {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.settings-menu-label {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--gray-800);
+}
+
+.settings-menu-desc {
+    font-size: 12px;
+    color: var(--gray-500);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.settings-menu-chevron {
+    color: var(--gray-400);
+    flex-shrink: 0;
+}
+
+.settings-dot {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.settings-dot-green {
+    background: var(--success);
+}
+
+.settings-dot-gray {
+    background: var(--gray-400);
+}
+
 /* === RESPONSIVE === */
 @media (max-width: 768px) {
     .toolbar {
@@ -811,12 +1194,42 @@ body {
         display: none;
     }
 
-    #dashboard-view {
+    .dashboard-content {
         padding: 16px;
     }
 
-    #project-grid {
+    .project-grid-view {
         grid-template-columns: 1fr;
+    }
+
+    .project-list-header {
+        display: none;
+    }
+
+    .project-list-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        padding: 12px;
+    }
+
+    .list-col-name {
+        width: 100%;
+        font-size: 14px;
+    }
+
+    .list-col-period,
+    .list-col-client,
+    .list-col-phases,
+    .list-col-acts,
+    .list-col-updated {
+        font-size: 11px;
+    }
+
+    .dashboard-controls {
+        flex-wrap: wrap;
+        order: 3;
+        width: 100%;
     }
 
     #versions-panel, #settings-panel, #deps-panel {
@@ -967,6 +1380,21 @@ body.dragging-ew *, body.dragging-grab * { cursor: inherit !important; }
 
 #settings-panel-body .form-row {
     grid-template-columns: 1fr;
+}
+
+/* === PROJECT OPTIONS PANEL === */
+.project-options-actions {
+    border-top: 1px solid var(--gray-200);
+    margin-top: 16px;
+    padding-top: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.project-options-actions .btn {
+    width: 100%;
+    justify-content: center;
 }
 
 /* === SEGMENTS COLLAPSIBLE === */
