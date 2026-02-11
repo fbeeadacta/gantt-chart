@@ -1,13 +1,132 @@
 // ui.js - Rendering UI: dashboard, toolbar, modali, toast
 App.UI = {
     // === DASHBOARD ===
+
+    _getProjectStatus(project) {
+        const phases = project.phases || [];
+        let totalActs = 0;
+        let completedActs = 0;
+        let hasLateAct = false;
+        const today = App.Utils.getToday();
+
+        for (const ph of phases) {
+            for (const act of (ph.activities || [])) {
+                totalActs++;
+                if (act.progress >= 100) {
+                    completedActs++;
+                } else {
+                    const end = App.Utils.parseDate(act.endDate);
+                    if (end && end < today) hasLateAct = true;
+                }
+            }
+        }
+
+        if (totalActs === 0) return { label: 'Non avviato', color: 'gray' };
+        if (completedActs === totalActs) return { label: 'Completato', color: 'green' };
+        if (hasLateAct) return { label: 'In ritardo', color: 'red' };
+
+        // Check if project is in progress (today within project range)
+        let minDate = null, maxDate = null;
+        for (const ph of phases) {
+            for (const act of (ph.activities || [])) {
+                const s = App.Utils.parseDate(act.startDate);
+                const e = App.Utils.parseDate(act.endDate);
+                if (s && (!minDate || s < minDate)) minDate = s;
+                if (e && (!maxDate || e > maxDate)) maxDate = e;
+            }
+        }
+        if (minDate && maxDate && today >= minDate && today <= maxDate) {
+            return { label: 'In corso', color: 'blue' };
+        }
+
+        return { label: 'Non avviato', color: 'gray' };
+    },
+
+    _computeCardData(project) {
+        const phases = project.phases || [];
+        const phaseCount = phases.length;
+        let actCount = 0;
+        let minDate = null, maxDate = null;
+        let totalDuration = 0, totalWeightedProgress = 0;
+
+        for (const ph of phases) {
+            const acts = ph.activities || [];
+            actCount += acts.length;
+            for (const a of acts) {
+                const s = App.Utils.parseDate(a.startDate);
+                const e = App.Utils.parseDate(a.endDate);
+                if (s && (!minDate || s < minDate)) minDate = s;
+                if (e && (!maxDate || e > maxDate)) maxDate = e;
+                const dur = (s && e) ? App.Utils.daysBetween(s, e) : 0;
+                totalDuration += dur;
+                totalWeightedProgress += (a.progress || 0) * dur;
+            }
+        }
+
+        const MESI_BREVI = ['gen', 'feb', 'mar', 'apr', 'mag', 'giu', 'lug', 'ago', 'set', 'ott', 'nov', 'dic'];
+        const periodo = minDate && maxDate
+            ? `${MESI_BREVI[minDate.getMonth()]} ${String(minDate.getFullYear()).slice(2)} - ${MESI_BREVI[maxDate.getMonth()]} ${String(maxDate.getFullYear()).slice(2)}`
+            : 'Nessuna attività';
+
+        const phasesProgress = phases.map(ph => {
+            const acts = ph.activities || [];
+            if (acts.length === 0) return { name: ph.label || ph.name, progress: 0 };
+            let phDur = 0, phWeighted = 0;
+            for (const a of acts) {
+                const s = App.Utils.parseDate(a.startDate);
+                const e = App.Utils.parseDate(a.endDate);
+                const dur = (s && e) ? App.Utils.daysBetween(s, e) : 0;
+                phDur += dur;
+                phWeighted += (a.progress || 0) * dur;
+            }
+            return { name: ph.label || ph.name, progress: phDur > 0 ? Math.round(phWeighted / phDur) : 0 };
+        });
+
+        const lastSaved = project._lastSaved
+            ? new Date(project._lastSaved).toLocaleString('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+            : '-';
+
+        const avgProgress = totalDuration > 0 ? Math.round(totalWeightedProgress / totalDuration) : 0;
+        const status = this._getProjectStatus(project);
+
+        return { phaseCount, actCount, periodo, lastSaved, avgProgress, status, client: project.client || '', phasesProgress };
+    },
+
+    _getProjectMinDate(project) {
+        let minDate = null;
+        for (const ph of (project.phases || [])) {
+            for (const a of (ph.activities || [])) {
+                const s = App.Utils.parseDate(a.startDate);
+                if (s && (!minDate || s < minDate)) minDate = s;
+            }
+        }
+        return minDate ? App.Utils.toISODate(minDate) : '9999-12-31';
+    },
+
+    _getUniqueClients() {
+        const clients = new Set();
+        for (const p of App.state.projects) {
+            if (p.client) clients.add(p.client);
+        }
+        return [...clients].sort((a, b) => a.localeCompare(b));
+    },
+
     renderDashboard() {
-        const container = document.getElementById('dashboard-view');
         const grid = document.getElementById('project-grid');
         grid.innerHTML = '';
 
         // Stato connessione workspace
         this.updateWorkspaceStatus();
+
+        // Sync state from DOM controls (in case renderDashboard is called externally)
+        const searchInput = document.getElementById('dashboard-search-input');
+        if (searchInput) App.state.dashboardSearch = searchInput.value;
+
+        const sortSelect = document.getElementById('dashboard-sort-select');
+        if (sortSelect) App.state.dashboardSort = sortSelect.value;
+
+        // Update view toggle active state
+        this._updateViewToggle();
 
         if (App.state.projects.length === 0) {
             grid.innerHTML = `
@@ -19,66 +138,211 @@ App.UI = {
             return;
         }
 
-        for (const p of App.state.projects) {
+        // Filter by search
+        const query = (App.state.dashboardSearch || '').toLowerCase().trim();
+        let filtered = App.state.projects;
+        if (query) {
+            filtered = filtered.filter(p =>
+                (p.title || '').toLowerCase().includes(query) ||
+                (p.client || '').toLowerCase().includes(query)
+            );
+        }
+
+        // Filter by client
+        const clientFilter = App.state.dashboardClientFilter;
+        if (clientFilter) {
+            filtered = filtered.filter(p => (p.client || '') === clientFilter);
+        }
+
+        // Update client filter dropdown options
+        this._updateClientFilterDropdown();
+
+        if (filtered.length === 0) {
+            grid.innerHTML = `
+                <div class="empty-state">
+                    <div class="empty-icon">🔍</div>
+                    <h3>Nessun risultato</h3>
+                    <p>Nessun progetto corrisponde alla ricerca</p>
+                </div>`;
+            return;
+        }
+
+        // Sort
+        filtered = [...filtered];
+        const sortBy = App.state.dashboardSort;
+        if (sortBy === 'nameAsc') {
+            filtered.sort((a, b) => (a.title || '').localeCompare(b.title || ''));
+        } else if (sortBy === 'nameDesc') {
+            filtered.sort((a, b) => (b.title || '').localeCompare(a.title || ''));
+        } else if (sortBy === 'startDate') {
+            filtered.sort((a, b) => this._getProjectMinDate(a).localeCompare(this._getProjectMinDate(b)));
+        } else {
+            // lastSaved (default, most recent first)
+            filtered.sort((a, b) => (b._lastSaved || '').localeCompare(a._lastSaved || ''));
+        }
+
+        // Render based on view mode
+        if (App.state.dashboardViewMode === 'list') {
+            this._renderDashboardList(filtered, grid);
+        } else {
+            this._renderDashboardGrid(filtered, grid);
+        }
+    },
+
+    _renderDashboardGrid(projects, grid) {
+        grid.className = 'project-grid-view';
+
+        for (const p of projects) {
+            const data = this._computeCardData(p);
             const card = document.createElement('div');
             card.className = 'project-card';
             card.onclick = () => openProject(p.id);
 
-            const phaseCount = p.phases?.length || 0;
-            let actCount = 0;
-            let minDate = null, maxDate = null;
-            for (const ph of (p.phases || [])) {
-                actCount += ph.activities?.length || 0;
-                for (const a of (ph.activities || [])) {
-                    const s = App.Utils.parseDate(a.startDate);
-                    const e = App.Utils.parseDate(a.endDate);
-                    if (s && (!minDate || s < minDate)) minDate = s;
-                    if (e && (!maxDate || e > maxDate)) maxDate = e;
-                }
-            }
-
-            const periodo = minDate && maxDate
-                ? `${App.Utils.formatDate(App.Utils.toISODate(minDate))} - ${App.Utils.formatDate(App.Utils.toISODate(maxDate))}`
-                : 'Nessuna attività';
-
-            const lastSaved = p._lastSaved
-                ? new Date(p._lastSaved).toLocaleString('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
-                : '-';
-
             card.innerHTML = `
                 <div class="card-header">
-                    <h3 class="card-title">${this.escapeHtml(p.title)}</h3>
+                    <div class="card-title-group">
+                        <h3 class="card-title">${this.escapeHtml(p.title)}</h3>
+                        ${data.client ? `<span class="card-client">${this.escapeHtml(data.client)}</span>` : ''}
+                        <span class="status-badge status-badge-${data.status.color}">${data.status.label}</span>
+                    </div>
                     <div class="card-actions" onclick="event.stopPropagation()">
-                        <button class="btn-icon" onclick="exportProject('${p.id}')" title="Esporta JSON">
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-                        </button>
-                        <button class="btn-icon btn-danger" onclick="deleteProject('${p.id}')" title="Elimina">
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                        <button class="btn-icon" onclick="showProjectOptions('${p.id}')" title="Opzioni">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/></svg>
                         </button>
                     </div>
                 </div>
                 <div class="card-body">
-                    <div class="card-stat"><span class="stat-label">Periodo</span><span class="stat-value">${periodo}</span></div>
-                    <div class="card-stat"><span class="stat-label">Fasi</span><span class="stat-value">${phaseCount}</span></div>
-                    <div class="card-stat"><span class="stat-label">Attività</span><span class="stat-value">${actCount}</span></div>
-                    <div class="card-stat"><span class="stat-label">Aggiornato</span><span class="stat-value">${lastSaved}</span></div>
+                    <div class="card-stat"><span class="stat-label">Periodo</span><span class="stat-value">${data.periodo}</span></div>
+                    <div class="card-stat"><span class="stat-label">Aggiornato</span><span class="stat-value">${data.lastSaved}</span></div>
+                    ${data.phasesProgress.length > 0 ? `
+                    <div class="card-phases-row">
+                        ${data.phasesProgress.map(ph => this._renderPhaseCircle(ph)).join('')}
+                    </div>` : ''}
+                </div>
+                <div class="card-progress">
+                    <div class="card-progress-bar">
+                        <div class="card-progress-fill" style="width:${data.avgProgress}%"></div>
+                    </div>
+                    <span class="card-progress-label">${data.avgProgress}%</span>
                 </div>`;
 
             grid.appendChild(card);
         }
     },
 
+    _renderPhaseCircle(phase) {
+        const size = 28;
+        const r = 10;
+        const circ = 2 * Math.PI * r;
+        const pct = phase.progress;
+        const title = this.escapeAttr(phase.name + ' \u2014 ' + pct + '%');
+
+        if (pct >= 100) {
+            return `<div class="phase-circle" title="${title}">
+                <svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">
+                    <circle cx="14" cy="14" r="${r}" fill="var(--success)" />
+                    <polyline points="9,14 12.5,17.5 19,11" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+            </div>`;
+        }
+
+        const offset = circ - (circ * pct / 100);
+        return `<div class="phase-circle" title="${title}">
+            <svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">
+                <circle cx="14" cy="14" r="${r}" fill="none" stroke="var(--gray-200)" stroke-width="3"/>
+                <circle cx="14" cy="14" r="${r}" fill="none" stroke="var(--primary)" stroke-width="3"
+                    stroke-dasharray="${circ}" stroke-dashoffset="${offset}"
+                    transform="rotate(-90 14 14)" stroke-linecap="round"/>
+                <text x="14" y="14" text-anchor="middle" dominant-baseline="central"
+                    font-size="8" font-weight="600" fill="var(--gray-600)">${pct}</text>
+            </svg>
+        </div>`;
+    },
+
+    _renderDashboardList(projects, grid) {
+        grid.className = 'project-list-view';
+
+        // Header
+        const header = document.createElement('div');
+        header.className = 'project-list-header';
+        header.innerHTML = `
+            <span class="list-col-name">Progetto</span>
+            <span class="list-col-client">Cliente</span>
+            <span class="list-col-status">Stato</span>
+            <span class="list-col-progress">Avanzamento</span>
+            <span class="list-col-period">Periodo</span>
+            <span class="list-col-phases">Fasi</span>
+            <span class="list-col-acts">Attività</span>
+            <span class="list-col-updated">Aggiornato</span>
+            <span class="list-col-actions">Azioni</span>`;
+        grid.appendChild(header);
+
+        for (const p of projects) {
+            const data = this._computeCardData(p);
+            const row = document.createElement('div');
+            row.className = 'project-list-row';
+            row.onclick = () => openProject(p.id);
+
+            row.innerHTML = `
+                <span class="list-col-name">${this.escapeHtml(p.title)}</span>
+                <span class="list-col-client">${this.escapeHtml(data.client)}</span>
+                <span class="list-col-status"><span class="status-badge status-badge-${data.status.color}">${data.status.label}</span></span>
+                <span class="list-col-progress">
+                    <span class="list-progress-bar"><span class="card-progress-fill" style="width:${data.avgProgress}%"></span></span>
+                    <span class="list-progress-label">${data.avgProgress}%</span>
+                </span>
+                <span class="list-col-period">${data.periodo}</span>
+                <span class="list-col-phases">${data.phaseCount}</span>
+                <span class="list-col-acts">${data.actCount}</span>
+                <span class="list-col-updated">${data.lastSaved}</span>
+                <span class="list-col-actions" onclick="event.stopPropagation()">
+                    <button class="btn-icon" onclick="showProjectOptions('${p.id}')" title="Opzioni">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/></svg>
+                    </button>
+                </span>`;
+            grid.appendChild(row);
+        }
+    },
+
+    _updateViewToggle() {
+        const gridBtn = document.getElementById('view-toggle-grid');
+        const listBtn = document.getElementById('view-toggle-list');
+        if (gridBtn) gridBtn.classList.toggle('active', App.state.dashboardViewMode === 'grid');
+        if (listBtn) listBtn.classList.toggle('active', App.state.dashboardViewMode === 'list');
+    },
+
+    _updateClientFilterDropdown() {
+        const select = document.getElementById('dashboard-client-filter');
+        if (!select) return;
+        const clients = this._getUniqueClients();
+        const current = App.state.dashboardClientFilter;
+        let html = '<option value="">Tutti i clienti</option>';
+        for (const c of clients) {
+            html += `<option value="${this.escapeAttr(c)}" ${c === current ? 'selected' : ''}>${this.escapeHtml(c)}</option>`;
+        }
+        select.innerHTML = html;
+    },
+
     updateWorkspaceStatus() {
         const el = document.getElementById('workspace-status');
         if (!el) return;
 
+        let icon, color, title;
         if (!App.state.fsAccessSupported) {
-            el.innerHTML = `<span class="status-warning">Salvataggio automatico non disponibile. Usa Import/Export manuale.</span>`;
+            icon = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>`;
+            color = 'var(--warning)';
+            title = 'Salvataggio automatico non disponibile';
         } else if (App.state.dirHandle) {
-            el.innerHTML = `<span class="status-ok">Cartella di lavoro connessa</span>`;
+            icon = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>`;
+            color = 'var(--success)';
+            title = 'Cartella di lavoro connessa';
         } else {
-            el.innerHTML = `<span class="status-info">Seleziona una cartella per il salvataggio automatico</span>`;
+            icon = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>`;
+            color = 'var(--gray-400)';
+            title = 'Nessuna cartella di lavoro selezionata';
         }
+
+        el.innerHTML = `<button class="workspace-status-btn" onclick="showGlobalSettings()" title="${title}" style="color:${color}">${icon}<span class="workspace-status-dot" style="background:${color}"></span></button>`;
     },
 
     // === GANTT VIEW ===
@@ -191,10 +455,15 @@ App.UI = {
                 <label>Titolo del progetto</label>
                 <input type="text" id="input-project-title" value="Nuovo Progetto" class="form-input" />
             </div>
+            <div class="form-group">
+                <label>Cliente (opzionale)</label>
+                <input type="text" id="input-project-client" class="form-input" placeholder="Es. Acme S.p.A." />
+            </div>
         `, () => {
             const title = document.getElementById('input-project-title').value.trim();
+            const client = document.getElementById('input-project-client').value.trim();
             if (!title) return;
-            createNewProject(title);
+            createNewProject(title, client);
         });
         setTimeout(() => {
             const inp = document.getElementById('input-project-title');
@@ -218,6 +487,78 @@ App.UI = {
                 App.Actions.saveAndRender();
             }
         });
+    },
+
+    // === Panel: Opzioni Progetto ===
+    showProjectOptionsPanel(projectId) {
+        const project = projectId
+            ? App.state.projects.find(p => p.id === projectId)
+            : App.getCurrentProject();
+        if (!project) return;
+        const fromDashboard = App.state.currentView === 'dashboard';
+
+        const body = document.getElementById('settings-panel-body');
+        body.innerHTML = `
+            <div class="form-group">
+                <label>Titolo progetto</label>
+                <input type="text" id="input-opt-title" value="${this.escapeAttr(project.title)}" class="form-input" />
+            </div>
+            <div class="form-group">
+                <label>Cliente</label>
+                <input type="text" id="input-opt-client" value="${this.escapeAttr(project.client || '')}" class="form-input" placeholder="Es. Acme S.p.A." />
+            </div>
+            <div class="settings-actions">
+                <button class="btn btn-primary" id="panel-opt-save-btn">Salva</button>
+            </div>
+            <div class="project-options-actions">
+                <button class="btn" id="panel-opt-export">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                    Esporta JSON
+                </button>
+                <button class="btn" id="panel-opt-duplicate">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                    Duplica progetto
+                </button>
+                <button class="btn btn-danger" id="panel-opt-delete">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                    Elimina progetto
+                </button>
+            </div>
+        `;
+
+        this.openSettingsPanel('Opzioni Progetto');
+
+        document.getElementById('panel-opt-save-btn').onclick = async () => {
+            const title = document.getElementById('input-opt-title').value.trim();
+            const client = document.getElementById('input-opt-client').value.trim();
+            if (title) project.title = title;
+            project.client = client;
+            await App.Storage.save(project);
+            this.closeSettingsPanel();
+            if (fromDashboard) {
+                this.renderDashboard();
+            } else {
+                this.renderGanttView();
+            }
+        };
+
+        document.getElementById('panel-opt-export').onclick = () => {
+            exportProject(project.id);
+        };
+
+        document.getElementById('panel-opt-duplicate').onclick = async () => {
+            this.closeSettingsPanel();
+            await App.Actions.duplicateProject(project.id);
+            if (!fromDashboard) App.Actions.backToDashboard();
+        };
+
+        document.getElementById('panel-opt-delete').onclick = () => {
+            if (confirm('Eliminare questo progetto?')) {
+                this.closeSettingsPanel();
+                App.Actions.deleteProject(project.id);
+                if (!fromDashboard) App.Actions.backToDashboard();
+            }
+        };
     },
 
     // === Panel: Nuova Fase ===
@@ -862,6 +1203,88 @@ App.UI = {
             project.steeringMilestones = project.steeringMilestones.filter(m => m.id !== msId);
             App.Actions.saveAndRender();
         });
+    },
+
+    // === Settings Panel: Impostazioni Globali ===
+    showGlobalSettingsPanel() {
+        const wsStatus = !App.state.fsAccessSupported
+            ? 'Non disponibile'
+            : App.state.dirHandle
+                ? 'Connessa'
+                : 'Non selezionata';
+        const wsClass = !App.state.fsAccessSupported
+            ? 'gray'
+            : App.state.dirHandle ? 'green' : 'gray';
+
+        const todayLabel = App.state.customToday
+            ? App.Utils.formatDate(App.state.customToday)
+            : 'Data reale';
+
+        const body = document.getElementById('settings-panel-body');
+        body.innerHTML = `
+            <div class="settings-menu">
+                ${App.state.fsAccessSupported ? `<button class="settings-menu-item" id="gs-workspace">
+                    <div class="settings-menu-icon">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+                    </div>
+                    <div class="settings-menu-text">
+                        <span class="settings-menu-label">Cartella di lavoro</span>
+                        <span class="settings-menu-desc"><span class="settings-dot settings-dot-${wsClass}"></span>${wsStatus}</span>
+                    </div>
+                    <svg class="settings-menu-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+                </button>` : ''}
+                <button class="settings-menu-item" id="gs-theme">
+                    <div class="settings-menu-icon">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+                    </div>
+                    <div class="settings-menu-text">
+                        <span class="settings-menu-label">Tema</span>
+                        <span class="settings-menu-desc">Colori e font del Gantt</span>
+                    </div>
+                    <svg class="settings-menu-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+                </button>
+                <button class="settings-menu-item" id="gs-today">
+                    <div class="settings-menu-icon">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                    </div>
+                    <div class="settings-menu-text">
+                        <span class="settings-menu-label">Data "Oggi"</span>
+                        <span class="settings-menu-desc">${todayLabel}</span>
+                    </div>
+                    <svg class="settings-menu-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+                </button>
+                <button class="settings-menu-item" id="gs-import">
+                    <div class="settings-menu-icon">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                    </div>
+                    <div class="settings-menu-text">
+                        <span class="settings-menu-label">Importa JSON</span>
+                        <span class="settings-menu-desc">Importa un file .gantt.json</span>
+                    </div>
+                    <svg class="settings-menu-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+                </button>
+            </div>
+        `;
+
+        this.openSettingsPanel('Impostazioni');
+
+        const wsBtn = document.getElementById('gs-workspace');
+        if (wsBtn) {
+            wsBtn.onclick = async () => {
+                this.closeSettingsPanel();
+                await selectWorkspace();
+            };
+        }
+        document.getElementById('gs-theme').onclick = () => {
+            this.showThemeSettingsModal();
+        };
+        document.getElementById('gs-today').onclick = () => {
+            this.showTodaySettingModal();
+        };
+        document.getElementById('gs-import').onclick = () => {
+            this.closeSettingsPanel();
+            importProject();
+        };
     },
 
     // === Settings Panel: Impostazione data "Oggi" ===

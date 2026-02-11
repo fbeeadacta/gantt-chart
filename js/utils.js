@@ -125,6 +125,7 @@ App.Utils = {
             _lastSaved: new Date().toISOString(),
             id: this.generateId('proj'),
             title: title,
+            client: '',
             phases: [],
             steeringMilestones: [],
             snapshots: []

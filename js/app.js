@@ -13,7 +13,11 @@ const App = {
         monthWidth: null, // null = auto-fit, oppure larghezza fissa in px SVG
         leftPanelWidth: null, // null = default da App.GANTT.leftPanelWidth (380px)
         svgHeight: null, // null = default calcolato, oppure altezza custom in px SVG
-        theme: {} // override colori/font, merge con DEFAULTS_THEME
+        theme: {}, // override colori/font, merge con DEFAULTS_THEME
+        dashboardSearch: '',
+        dashboardSort: 'lastSaved',    // 'nameAsc' | 'nameDesc' | 'lastSaved' | 'startDate'
+        dashboardViewMode: 'grid',     // 'grid' | 'list'
+        dashboardClientFilter: ''      // '' = tutti, oppure nome cliente
     },
 
     DEFAULTS_THEME: {

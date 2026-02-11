@@ -26,8 +26,9 @@ App.Actions = {
         }
     },
 
-    async createProject(title) {
+    async createProject(title, client) {
         const project = App.Utils.createEmptyProject(title);
+        if (client) project.client = client;
         App.state.projects.push(project);
         await App.Storage.save(project);
         App.UI.toast('Progetto creato');
@@ -174,6 +175,64 @@ App.Actions = {
         this.saveAndRender();
         App.UI.renderVersionsPanel();
         App.UI.toast(App.state.baselineActive ? 'Baseline attivata' : 'Baseline rimossa');
+    },
+
+    async duplicateProject(projectId) {
+        const original = App.state.projects.find(p => p.id === projectId);
+        if (!original) return;
+
+        const clone = App.Utils.deepClone(original);
+
+        // New project ID
+        const newProjectId = App.Utils.generateId('proj');
+        clone.id = newProjectId;
+        clone.title = original.title + ' (copia)';
+        clone._lastSaved = new Date().toISOString();
+
+        // Build idMap: old ID -> new ID
+        const idMap = {};
+        for (const phase of clone.phases) {
+            const newPhaseId = App.Utils.generateId('phase');
+            idMap[phase.id] = newPhaseId;
+            phase.id = newPhaseId;
+
+            for (const act of phase.activities) {
+                const newActId = App.Utils.generateId('act');
+                idMap[act.id] = newActId;
+                act.id = newActId;
+            }
+        }
+        for (const ms of clone.steeringMilestones) {
+            const newMsId = App.Utils.generateId('ms');
+            idMap[ms.id] = newMsId;
+            ms.id = newMsId;
+        }
+
+        // Update dependency predecessorId references
+        for (const phase of clone.phases) {
+            for (const act of phase.activities) {
+                if (act.dependencies) {
+                    for (const dep of act.dependencies) {
+                        if (idMap[dep.predecessorId]) {
+                            dep.predecessorId = idMap[dep.predecessorId];
+                        }
+                    }
+                }
+            }
+        }
+
+        // Reset baseline on snapshots
+        for (const snap of (clone.snapshots || [])) {
+            const newSnapId = App.Utils.generateId('snap');
+            idMap[snap.id] = newSnapId;
+            snap.id = newSnapId;
+            snap.isBaseline = false;
+        }
+
+        App.state.projects.push(clone);
+        await App.Storage.save(clone);
+        App.UI.toast('Progetto duplicato');
+        App.UI.renderDashboard();
     },
 
     deleteSnapshot(snapId) {

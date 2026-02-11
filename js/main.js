@@ -24,6 +24,14 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     } catch(e) {}
 
+    // Ripristina dashboardViewMode da localStorage
+    try {
+        const savedViewMode = localStorage.getItem('gantt_dashboardViewMode');
+        if (savedViewMode === 'grid' || savedViewMode === 'list') {
+            App.state.dashboardViewMode = savedViewMode;
+        }
+    } catch(e) {}
+
     // Tenta riconnessione alla cartella
     if (App.state.fsAccessSupported) {
         await App.Workspace.reconnect();
@@ -66,8 +74,8 @@ function showNewProjectModal() {
     App.UI.showNewProjectModal();
 }
 
-function createNewProject(title) {
-    App.Actions.createProject(title);
+function createNewProject(title, client) {
+    App.Actions.createProject(title, client);
 }
 
 function deleteProject(id) {
@@ -82,6 +90,26 @@ function exportProject(id) {
         App.Storage.exportProjectJSON(project);
         App.UI.toast('Progetto esportato');
     }
+}
+
+function duplicateProject(id) {
+    App.Actions.duplicateProject(id);
+}
+
+function dashboardSearch(query) {
+    App.state.dashboardSearch = query;
+    App.UI.renderDashboard();
+}
+
+function dashboardSort(sortBy) {
+    App.state.dashboardSort = sortBy;
+    App.UI.renderDashboard();
+}
+
+function setDashboardView(mode) {
+    App.state.dashboardViewMode = mode;
+    try { localStorage.setItem('gantt_dashboardViewMode', mode); } catch(e) {}
+    App.UI.renderDashboard();
 }
 
 function importProject() {
@@ -158,6 +186,19 @@ function showEditMilestoneModal(msId) {
 
 function showEditProjectModal() {
     App.UI.showEditProjectModal();
+}
+
+function showProjectOptions(projectId) {
+    App.UI.showProjectOptionsPanel(projectId);
+}
+
+function dashboardClientFilterChange(client) {
+    App.state.dashboardClientFilter = client;
+    App.UI.renderDashboard();
+}
+
+function showGlobalSettings() {
+    App.UI.showGlobalSettingsPanel();
 }
 
 function showTodaySettingModal() {
