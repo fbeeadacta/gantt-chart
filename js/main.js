@@ -24,6 +24,14 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     } catch(e) {}
 
+    // Ripristina showCriticalPath da localStorage
+    try {
+        const savedCP = localStorage.getItem('gantt_showCriticalPath');
+        if (savedCP !== null) {
+            App.state.showCriticalPath = savedCP === '1';
+        }
+    } catch(e) {}
+
     // Ripristina dashboardViewMode da localStorage
     try {
         const savedViewMode = localStorage.getItem('gantt_dashboardViewMode');
@@ -142,6 +150,15 @@ async function selectWorkspace() {
     }
 }
 
+// Undo/Redo
+function undoAction() {
+    App.History.undo();
+}
+
+function redoAction() {
+    App.History.redo();
+}
+
 // Modal
 function closeModal() {
     App.UI.closeModal();
@@ -152,16 +169,16 @@ function showNewPhaseModal() {
     App.UI.showNewPhaseModal();
 }
 
-function addPhase(name, label) {
-    App.Actions.addPhase(name, label);
+function addPhase(name, label, color) {
+    App.Actions.addPhase(name, label, color);
 }
 
 function showNewActivityModal() {
     App.UI.showNewActivityModal();
 }
 
-function addActivity(phaseId, name, startDate, endDate, progress, hasMilestone) {
-    App.Actions.addActivity(phaseId, name, startDate, endDate, progress, hasMilestone);
+function addActivity(phaseId, name, startDate, endDate, progress, hasMilestone, color) {
+    App.Actions.addActivity(phaseId, name, startDate, endDate, progress, hasMilestone, color);
 }
 
 function showNewMilestoneModal() {
@@ -235,6 +252,33 @@ function toggleDepsPanel() {
     App.UI.toggleDepsPanel();
 }
 
+// Critical path toggle
+function toggleCriticalPath() {
+    const checkbox = document.getElementById('deps-critical-toggle');
+    if (checkbox) {
+        App.state.showCriticalPath = checkbox.checked;
+    } else {
+        App.state.showCriticalPath = !App.state.showCriticalPath;
+    }
+    // Attiva automaticamente le frecce se si attiva il percorso critico
+    if (App.state.showCriticalPath && !App.state.showDependencyArrows) {
+        App.state.showDependencyArrows = true;
+        try { localStorage.setItem('gantt_showDependencyArrows', '1'); } catch(e) {}
+    }
+    try { localStorage.setItem('gantt_showCriticalPath', App.state.showCriticalPath ? '1' : '0'); } catch(e) {}
+    _updateCriticalPathButton();
+    if (App.state.currentView === 'gantt') {
+        App.UI.renderGanttView();
+    }
+}
+
+function _updateCriticalPathButton() {
+    const btn = document.getElementById('btn-toggle-critical');
+    if (btn) {
+        btn.classList.toggle('tools-btn-active', App.state.showCriticalPath);
+    }
+}
+
 // Dependency arrows toggle (state only, called from panel checkbox)
 function toggleDependencyArrows() {
     const checkbox = document.getElementById('deps-global-toggle');
@@ -271,14 +315,37 @@ function setBaseline(snapId) {
     App.Actions.setBaseline(snapId);
 }
 
+function restoreSnapshot(snapId) {
+    if (confirm('Ripristinare questo snapshot? Verrà creato un backup automatico dello stato corrente.')) {
+        App.Actions.restoreSnapshot(snapId);
+    }
+}
+
 function deleteSnapshot(snapId) {
     if (confirm('Eliminare questo snapshot?')) {
         App.Actions.deleteSnapshot(snapId);
     }
 }
 
-// Keyboard shortcut: Escape chiude modale
+// Keyboard shortcuts
 document.addEventListener('keydown', (e) => {
+    // Undo/Redo (skip se focus su input/textarea)
+    if ((e.ctrlKey || e.metaKey) && !e.altKey) {
+        const tag = document.activeElement?.tagName;
+        if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+
+        if (e.key === 'z' && !e.shiftKey) {
+            e.preventDefault();
+            App.History.undo();
+            return;
+        }
+        if (e.key === 'y' || (e.key === 'z' && e.shiftKey) || (e.key === 'Z' && e.shiftKey)) {
+            e.preventDefault();
+            App.History.redo();
+            return;
+        }
+    }
+
     if (e.key === 'Escape') {
         closeModal();
         if (App.state.versionsPanelOpen) {

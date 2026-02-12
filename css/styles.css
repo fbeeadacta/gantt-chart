@@ -122,6 +122,13 @@ body {
     color: var(--primary);
 }
 
+.btn.btn-disabled,
+.btn.btn-disabled:hover {
+    opacity: 0.35;
+    pointer-events: none;
+    cursor: default;
+}
+
 .btn-primary {
     background: var(--primary);
     color: white;
@@ -202,6 +209,16 @@ body {
 
 .btn-small.btn-danger:hover {
     background: #fef2f2;
+}
+
+.btn-small.btn-restore {
+    color: var(--primary);
+    border-color: transparent;
+    background: transparent;
+}
+
+.btn-small.btn-restore:hover {
+    background: var(--primary-light);
 }
 
 /* === DASHBOARD === */
@@ -1428,6 +1445,80 @@ body.dragging-ew *, body.dragging-grab * { cursor: inherit !important; }
 
 .segments-collapsible-body {
     padding-top: 4px;
+}
+
+/* Color Picker */
+.color-picker-group {
+    margin-bottom: 0;
+}
+
+.color-current-dot {
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    vertical-align: middle;
+    margin-left: 4px;
+    border: 1px solid rgba(0,0,0,0.15);
+}
+
+.color-picker-row {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+.color-preset {
+    width: 24px;
+    height: 24px;
+    border-radius: 4px;
+    cursor: pointer;
+    border: 2px solid transparent;
+    transition: border-color 0.15s, transform 0.15s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.color-preset:hover {
+    transform: scale(1.15);
+}
+
+.color-preset.selected {
+    border-color: var(--gray-800);
+    box-shadow: 0 0 0 1px #fff, 0 0 0 3px var(--gray-400);
+}
+
+.color-preset-none {
+    background: #fff;
+    border: 2px dashed var(--gray-300);
+    color: var(--gray-400);
+}
+
+.color-preset-none.selected {
+    border-style: solid;
+    border-color: var(--gray-800);
+}
+
+.color-custom-input {
+    width: 28px;
+    height: 24px;
+    padding: 0;
+    border: 1px solid var(--gray-300);
+    border-radius: 4px;
+    cursor: pointer;
+    background: none;
+    margin-left: 4px;
+}
+
+.color-custom-input::-webkit-color-swatch-wrapper {
+    padding: 1px;
+}
+
+.color-custom-input::-webkit-color-swatch {
+    border: none;
+    border-radius: 2px;
 }
 
 .segment-row {

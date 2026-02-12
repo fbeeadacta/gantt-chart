@@ -132,6 +132,17 @@ App.Utils = {
         };
     },
 
+    lightenColor(hex, amount) {
+        hex = hex.replace('#', '');
+        const r = parseInt(hex.substring(0, 2), 16);
+        const g = parseInt(hex.substring(2, 4), 16);
+        const b = parseInt(hex.substring(4, 6), 16);
+        const nr = Math.round(r + (255 - r) * amount);
+        const ng = Math.round(g + (255 - g) * amount);
+        const nb = Math.round(b + (255 - b) * amount);
+        return '#' + [nr, ng, nb].map(c => c.toString(16).padStart(2, '0')).join('');
+    },
+
     deepClone(obj) {
         return JSON.parse(JSON.stringify(obj));
     },

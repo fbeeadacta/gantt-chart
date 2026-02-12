@@ -155,7 +155,7 @@ App.Dependencies = {
                     const aboveToY = depLayout.y + barTopOffset - 4;
                     const toY = depLayout.y + G.activityRowHeight / 2;
 
-                    arrows.push({ fromX, fromY, toX, toY, aboveToY, predecessorId: dep.predecessorId });
+                    arrows.push({ fromX, fromY, toX, toY, aboveToY, predecessorId: dep.predecessorId, dependentId: act.id });
                 }
             }
         }
@@ -238,5 +238,203 @@ App.Dependencies = {
                 }
             }
         }
+    },
+
+    computeCriticalPath(project) {
+        const result = { criticalActivityIds: new Set(), criticalArrows: new Set() };
+
+        // Raccogli tutte le attività con dipendenze (connesse al grafo)
+        const allActs = new Map(); // id -> activity
+        const depMap = new Map();  // predecessorId -> [{depAct, dep}]
+        const predMap = new Map(); // actId -> [{predAct, dep}]
+        const connectedIds = new Set();
+
+        for (const phase of project.phases) {
+            for (const act of phase.activities) {
+                allActs.set(act.id, act);
+            }
+        }
+
+        for (const phase of project.phases) {
+            for (const act of phase.activities) {
+                if (!act.dependencies) continue;
+                for (const dep of act.dependencies) {
+                    if (!allActs.has(dep.predecessorId)) continue;
+                    connectedIds.add(act.id);
+                    connectedIds.add(dep.predecessorId);
+
+                    if (!depMap.has(dep.predecessorId)) depMap.set(dep.predecessorId, []);
+                    depMap.get(dep.predecessorId).push({ depAct: act, dep });
+
+                    if (!predMap.has(act.id)) predMap.set(act.id, []);
+                    predMap.get(act.id).push({ predAct: allActs.get(dep.predecessorId), dep });
+                }
+            }
+        }
+
+        if (connectedIds.size === 0) return result;
+
+        // Forward pass: calcola Early Start (ES) / Early Finish (EF)
+        const ES = new Map();
+        const EF = new Map();
+
+        // Topological sort via Kahn's algorithm
+        const inDegree = new Map();
+        for (const id of connectedIds) {
+            inDegree.set(id, 0);
+        }
+        for (const [predId, deps] of depMap) {
+            for (const { depAct } of deps) {
+                inDegree.set(depAct.id, (inDegree.get(depAct.id) || 0) + 1);
+            }
+        }
+        // Reset: only count dependencies within connected set
+        for (const id of connectedIds) {
+            inDegree.set(id, 0);
+        }
+        for (const [predId, deps] of depMap) {
+            for (const { depAct } of deps) {
+                if (connectedIds.has(predId) && connectedIds.has(depAct.id)) {
+                    inDegree.set(depAct.id, (inDegree.get(depAct.id) || 0) + 1);
+                }
+            }
+        }
+
+        const queue = [];
+        for (const [id, deg] of inDegree) {
+            if (deg === 0) queue.push(id);
+        }
+
+        const topoOrder = [];
+        while (queue.length > 0) {
+            const id = queue.shift();
+            topoOrder.push(id);
+            const deps = depMap.get(id) || [];
+            for (const { depAct } of deps) {
+                if (!connectedIds.has(depAct.id)) continue;
+                const newDeg = (inDegree.get(depAct.id) || 1) - 1;
+                inDegree.set(depAct.id, newDeg);
+                if (newDeg === 0) queue.push(depAct.id);
+            }
+        }
+
+        // Inizializza ES con la data di inizio effettiva di ogni attività
+        for (const id of connectedIds) {
+            const act = allActs.get(id);
+            const start = App.Utils.parseDate(act.startDate);
+            const end = App.Utils.parseDate(act.endDate);
+            if (!start || !end) continue;
+            ES.set(id, start.getTime());
+            EF.set(id, end.getTime());
+        }
+
+        // Forward pass
+        for (const id of topoOrder) {
+            const act = allActs.get(id);
+            if (!act) continue;
+            const preds = predMap.get(id) || [];
+            let maxEarlyStart = ES.get(id) || 0;
+
+            for (const { predAct, dep } of preds) {
+                const predEF = EF.get(predAct.id);
+                if (predEF == null) continue;
+                const anchorDate = dep.fromPoint === 'start' ? ES.get(predAct.id) : predEF;
+                if (anchorDate == null) continue;
+                const target = anchorDate + dep.offsetDays * 86400000;
+                if (dep.toPoint === 'start') {
+                    if (target > maxEarlyStart) maxEarlyStart = target;
+                }
+            }
+
+            const actStart = App.Utils.parseDate(act.startDate);
+            const actEnd = App.Utils.parseDate(act.endDate);
+            if (!actStart || !actEnd) continue;
+            const duration = actEnd.getTime() - actStart.getTime();
+            ES.set(id, maxEarlyStart);
+            EF.set(id, maxEarlyStart + duration);
+        }
+
+        // Backward pass: calcola Late Start (LS) / Late Finish (LF)
+        const LS = new Map();
+        const LF = new Map();
+
+        // Trova il max EF (fine del progetto)
+        let maxEF = 0;
+        for (const ef of EF.values()) {
+            if (ef > maxEF) maxEF = ef;
+        }
+
+        // Inizializza LF = maxEF per tutti
+        for (const id of connectedIds) {
+            LF.set(id, maxEF);
+            const act = allActs.get(id);
+            const actStart = App.Utils.parseDate(act.startDate);
+            const actEnd = App.Utils.parseDate(act.endDate);
+            if (actStart && actEnd) {
+                const duration = actEnd.getTime() - actStart.getTime();
+                LS.set(id, maxEF - duration);
+            }
+        }
+
+        // Backward pass (reverse topological order)
+        for (let i = topoOrder.length - 1; i >= 0; i--) {
+            const id = topoOrder[i];
+            const act = allActs.get(id);
+            if (!act) continue;
+            const actStart = App.Utils.parseDate(act.startDate);
+            const actEnd = App.Utils.parseDate(act.endDate);
+            if (!actStart || !actEnd) continue;
+            const duration = actEnd.getTime() - actStart.getTime();
+
+            const successors = depMap.get(id) || [];
+            let minLate = LF.get(id) || maxEF;
+
+            for (const { depAct, dep } of successors) {
+                if (!connectedIds.has(depAct.id)) continue;
+                const depLS = LS.get(depAct.id);
+                const depLF = LF.get(depAct.id);
+                if (depLS == null || depLF == null) continue;
+
+                const anchorDate = dep.toPoint === 'start' ? depLS : depLF;
+                const target = anchorDate - dep.offsetDays * 86400000;
+
+                if (dep.fromPoint === 'end') {
+                    if (target < minLate) minLate = target;
+                } else {
+                    const shifted = target + duration;
+                    if (shifted < minLate) minLate = shifted;
+                }
+            }
+
+            LF.set(id, minLate);
+            LS.set(id, minLate - duration);
+        }
+
+        // Float = LS - ES; critico se float ~ 0
+        const THRESHOLD = 86400000; // 1 giorno di tolleranza
+        for (const id of connectedIds) {
+            const es = ES.get(id);
+            const ls = LS.get(id);
+            if (es == null || ls == null) continue;
+            const float = ls - es;
+            if (Math.abs(float) <= THRESHOLD) {
+                result.criticalActivityIds.add(id);
+            }
+        }
+
+        // Frecce critiche: tra due attività critiche
+        for (const phase of project.phases) {
+            for (const act of phase.activities) {
+                if (!act.dependencies) continue;
+                if (!result.criticalActivityIds.has(act.id)) continue;
+                for (const dep of act.dependencies) {
+                    if (result.criticalActivityIds.has(dep.predecessorId)) {
+                        result.criticalArrows.add(dep.predecessorId + '->' + act.id);
+                    }
+                }
+            }
+        }
+
+        return result;
     }
 };

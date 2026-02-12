@@ -69,6 +69,15 @@
         <span class="toolbar-title" id="gantt-project-title" onclick="showProjectOptions()" title="Opzioni progetto"></span>
         <div class="toolbar-separator"></div>
 
+        <!-- Undo/Redo -->
+        <button class="btn" id="btn-undo" onclick="undoAction()" title="Annulla (Ctrl+Z)">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 4v6h6"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
+        </button>
+        <button class="btn" id="btn-redo" onclick="redoAction()" title="Ripristina (Ctrl+Y)">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 4v6h-6"/><path d="M20.49 15a9 9 0 1 1-2.13-9.36L23 10"/></svg>
+        </button>
+        <div class="toolbar-separator"></div>
+
         <!-- Export -->
         <button class="btn" onclick="exportSVG()">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
@@ -112,6 +121,10 @@
                 <button class="tools-btn" id="btn-toggle-deps" onclick="toggleDepsPanel()" title="Gestisci dipendenze">
                     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
                     <span>Dipendenze</span>
+                </button>
+                <button class="tools-btn" id="btn-toggle-critical" onclick="toggleCriticalPath()" title="Evidenzia il cammino critico">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                    <span>Critico</span>
                 </button>
                 <div class="tools-separator"></div>
                 <button class="tools-btn" onclick="toggleVersionsPanel()" title="Versioni e snapshot">
@@ -191,6 +204,7 @@
 <script src="js/storage.js"></script>
 <script src="js/gantt.js"></script>
 <script src="js/drag.js"></script>
+<script src="js/history.js"></script>
 <script src="js/ui.js"></script>
 <script src="js/exporter.js"></script>
 <script src="js/actions.js"></script>

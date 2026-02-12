@@ -6,6 +6,7 @@ const App = {
         currentView: 'dashboard', // 'dashboard' | 'gantt'
         baselineActive: false,
         showDependencyArrows: true,
+        showCriticalPath: false,
         versionsPanelOpen: false,
         customToday: null, // null = data reale, oppure 'YYYY-MM-DD'
         dirHandle: null,
@@ -46,6 +47,8 @@ const App = {
         yearLine: '#AEAAAA',
         rowAlt: '#f8f9fa'
     },
+
+    COLOR_PRESETS: ['#1a3a5c', '#5c88da', '#2ecc71', '#e74c3c', '#f39c12', '#9b59b6', '#1abc9c', '#e67e22', '#34495e', '#c0392b'],
 
     MONTHS_IT: ['GEN', 'FEB', 'MAR', 'APR', 'MAG', 'GIU', 'LUG', 'AGO', 'SET', 'OTT', 'NOV', 'DIC'],
 

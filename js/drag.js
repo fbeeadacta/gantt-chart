@@ -63,6 +63,14 @@ App.Drag = {
             this.startMilestoneDrag(e, target);
             return;
         }
+        if (dragType === 'reorder-phase') {
+            this.startPhaseReorder(e, target);
+            return;
+        }
+        if (dragType === 'reorder-activity') {
+            this.startActivityReorder(e, target);
+            return;
+        }
 
         const actId = target.getAttribute('data-activity-id');
         if (!actId) return;
@@ -419,6 +427,62 @@ App.Drag = {
             return;
         }
 
+        // Reorder phase
+        if (s.type === 'reorder-phase') {
+            const svgPt = this.screenToSVG(e.clientX, e.clientY);
+            const dy = svgPt.y - s.startSvgY;
+            if (!s.moved && Math.abs(dy) < 5) return;
+            s.moved = true;
+
+            // Trova target index confrontando mouse Y con midpoint fasi
+            let targetIdx = s.phaseMidpoints.length;
+            for (let i = 0; i < s.phaseMidpoints.length; i++) {
+                if (svgPt.y < s.phaseMidpoints[i]) { targetIdx = i; break; }
+            }
+            s.targetIndex = targetIdx;
+
+            // Disegna linea indicatore
+            const layout = this._layout;
+            let lineY;
+            if (targetIdx === 0) {
+                lineY = layout.phaseLayouts[0].startY;
+            } else if (targetIdx >= layout.phaseLayouts.length) {
+                lineY = layout.phaseLayouts[layout.phaseLayouts.length - 1].endY;
+            } else {
+                lineY = layout.phaseLayouts[targetIdx].startY;
+            }
+            this._drawIndicatorLine(lineY);
+            return;
+        }
+
+        // Reorder activity
+        if (s.type === 'reorder-activity') {
+            const svgPt = this.screenToSVG(e.clientX, e.clientY);
+            const dy = svgPt.y - s.startSvgY;
+            if (!s.moved && Math.abs(dy) < 5) return;
+            s.moved = true;
+
+            let targetIdx = s.actMidpoints.length;
+            for (let i = 0; i < s.actMidpoints.length; i++) {
+                if (svgPt.y < s.actMidpoints[i]) { targetIdx = i; break; }
+            }
+            s.targetIndex = targetIdx;
+
+            const G = App.GANTT;
+            const pl = s.phaseLayout;
+            let lineY;
+            if (targetIdx === 0 && pl.activities.length > 0) {
+                lineY = pl.activities[0].y;
+            } else if (targetIdx >= pl.activities.length) {
+                const lastAl = pl.activities[pl.activities.length - 1];
+                lineY = lastAl.y + G.activityRowHeight;
+            } else {
+                lineY = pl.activities[targetIdx].y;
+            }
+            this._drawIndicatorLine(lineY);
+            return;
+        }
+
         const svgPt = this.screenToSVG(e.clientX, e.clientY);
         const dx = svgPt.x - s.startSvgX;
 
@@ -552,6 +616,41 @@ App.Drag = {
             return;
         }
 
+        // Reorder phase
+        if (s.type === 'reorder-phase') {
+            this._removeIndicatorLine();
+            const project = App.getCurrentProject();
+            if (project && s.targetIndex !== s.phaseIndex) {
+                const [phase] = project.phases.splice(s.phaseIndex, 1);
+                const insertIdx = s.targetIndex > s.phaseIndex ? s.targetIndex - 1 : s.targetIndex;
+                project.phases.splice(insertIdx, 0, phase);
+                App.Actions.saveAndRender();
+            }
+            this._justDragged = true;
+            setTimeout(() => { this._justDragged = false; }, 300);
+            this.cleanup();
+            return;
+        }
+
+        // Reorder activity
+        if (s.type === 'reorder-activity') {
+            this._removeIndicatorLine();
+            const project = App.getCurrentProject();
+            if (project) {
+                const phase = project.phases.find(p => p.id === s.phaseId);
+                if (phase && s.targetIndex !== s.actIndex) {
+                    const [act] = phase.activities.splice(s.actIndex, 1);
+                    const insertIdx = s.targetIndex > s.actIndex ? s.targetIndex - 1 : s.targetIndex;
+                    phase.activities.splice(insertIdx, 0, act);
+                    App.Actions.saveAndRender();
+                }
+            }
+            this._justDragged = true;
+            setTimeout(() => { this._justDragged = false; }, 300);
+            this.cleanup();
+            return;
+        }
+
         // Move-milestone: aggiorna data milestone
         if (s.type === 'move-milestone') {
             const svgPt = this.screenToSVG(e.clientX, e.clientY);
@@ -675,6 +774,13 @@ App.Drag = {
             return;
         }
 
+        // Reorder: rimuovi linea indicatore
+        if (s.type === 'reorder-phase' || s.type === 'reorder-activity') {
+            this._removeIndicatorLine();
+            this.cleanup();
+            return;
+        }
+
         // Move-milestone: ripristina posizione originale
         if (s.type === 'move-milestone') {
             if (s.msGroup) {
@@ -707,6 +813,114 @@ App.Drag = {
         }
 
         this.cleanup();
+    },
+
+    startPhaseReorder(e, target) {
+        const phaseId = target.getAttribute('data-phase-id');
+        if (!phaseId) return;
+        const project = App.getCurrentProject();
+        if (!project) return;
+        const phaseIndex = project.phases.findIndex(p => p.id === phaseId);
+        if (phaseIndex === -1) return;
+
+        const svgPt = this.screenToSVG(e.clientX, e.clientY);
+        const layout = this._layout;
+
+        // Raccogli midpoint di ogni fase
+        const phaseMidpoints = layout.phaseLayouts.map(pl => (pl.startY + pl.endY) / 2);
+
+        this._state = {
+            type: 'reorder-phase',
+            phaseId,
+            phaseIndex,
+            startSvgY: svgPt.y,
+            phaseMidpoints,
+            targetIndex: phaseIndex,
+            moved: false,
+            indicatorLine: null
+        };
+
+        this._dragging = true;
+        this._justDragged = false;
+        document.body.classList.add('dragging-grab');
+        this._cursorClass = 'dragging-grab';
+
+        this._onMouseMove = (ev) => this.handleMouseMove(ev);
+        this._onMouseUp = (ev) => this.handleMouseUp(ev);
+        this._onKeyDown = (ev) => { if (ev.key === 'Escape') this.cancelDrag(); };
+        document.addEventListener('mousemove', this._onMouseMove);
+        document.addEventListener('mouseup', this._onMouseUp);
+        document.addEventListener('keydown', this._onKeyDown);
+        e.preventDefault();
+    },
+
+    startActivityReorder(e, target) {
+        const actId = target.getAttribute('data-activity-id');
+        const phaseId = target.getAttribute('data-phase-id');
+        if (!actId || !phaseId) return;
+        const project = App.getCurrentProject();
+        if (!project) return;
+        const phase = project.phases.find(p => p.id === phaseId);
+        if (!phase) return;
+        const actIndex = phase.activities.findIndex(a => a.id === actId);
+        if (actIndex === -1) return;
+
+        const svgPt = this.screenToSVG(e.clientX, e.clientY);
+        const layout = this._layout;
+
+        // Raccogli midpoint di ogni attività in questa fase
+        const pl = layout.phaseLayouts.find(p => p.phase.id === phaseId);
+        if (!pl) return;
+        const actMidpoints = pl.activities.map(al => al.y + App.GANTT.activityRowHeight / 2);
+
+        this._state = {
+            type: 'reorder-activity',
+            actId,
+            phaseId,
+            actIndex,
+            startSvgY: svgPt.y,
+            actMidpoints,
+            targetIndex: actIndex,
+            moved: false,
+            indicatorLine: null,
+            phaseLayout: pl
+        };
+
+        this._dragging = true;
+        this._justDragged = false;
+        document.body.classList.add('dragging-grab');
+        this._cursorClass = 'dragging-grab';
+
+        this._onMouseMove = (ev) => this.handleMouseMove(ev);
+        this._onMouseUp = (ev) => this.handleMouseUp(ev);
+        this._onKeyDown = (ev) => { if (ev.key === 'Escape') this.cancelDrag(); };
+        document.addEventListener('mousemove', this._onMouseMove);
+        document.addEventListener('mouseup', this._onMouseUp);
+        document.addEventListener('keydown', this._onKeyDown);
+        e.preventDefault();
+    },
+
+    _removeIndicatorLine() {
+        if (this._state && this._state.indicatorLine) {
+            this._state.indicatorLine.remove();
+            this._state.indicatorLine = null;
+        }
+    },
+
+    _drawIndicatorLine(y) {
+        this._removeIndicatorLine();
+        const layout = this._layout;
+        const panelW = layout.timelineX;
+        const line = document.createElementNS(App.Gantt.ns, 'line');
+        line.setAttribute('x1', App.GANTT.padding.left + App.GANTT.titleColWidth + App.GANTT.phaseSeparator);
+        line.setAttribute('y1', y);
+        line.setAttribute('x2', panelW - 4);
+        line.setAttribute('y2', y);
+        line.setAttribute('stroke', '#5c88da');
+        line.setAttribute('stroke-width', '2');
+        line.setAttribute('stroke-dasharray', '4,3');
+        this._svg.appendChild(line);
+        this._state.indicatorLine = line;
     },
 
     cleanup() {

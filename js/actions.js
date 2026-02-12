@@ -18,6 +18,9 @@ App.Actions = {
         // Salvataggio immediato
         await App.Storage.save(project);
 
+        // Push stato nella history (no-op se paused durante undo/redo)
+        App.History.pushState();
+
         // Re-render vista corrente
         if (App.state.currentView === 'gantt') {
             App.UI.renderGanttView();
@@ -74,10 +77,12 @@ App.Actions = {
             App.state.svgHeight = null;
         }
 
+        App.History.init(projectId);
         App.UI.showView('gantt');
     },
 
     backToDashboard() {
+        App.History.clear();
         App.state.currentProjectId = null;
         App.state.versionsPanelOpen = false;
         App.state.monthWidth = null;
@@ -86,33 +91,37 @@ App.Actions = {
         App.UI.showView('dashboard');
     },
 
-    addPhase(name, label) {
+    addPhase(name, label, color) {
         const project = App.getCurrentProject();
         if (!project) return;
-        project.phases.push({
+        const phase = {
             id: App.Utils.generateId('phase'),
             name,
             label,
             activities: []
-        });
+        };
+        if (color) phase.color = color;
+        project.phases.push(phase);
         this.saveAndRender();
         App.UI.toast('Fase aggiunta');
     },
 
-    addActivity(phaseId, name, startDate, endDate, progress, hasMilestone) {
+    addActivity(phaseId, name, startDate, endDate, progress, hasMilestone, color) {
         const project = App.getCurrentProject();
         if (!project) return;
         const phase = project.phases.find(p => p.id === phaseId);
         if (!phase) return;
 
-        phase.activities.push({
+        const act = {
             id: App.Utils.generateId('act'),
             name,
             startDate,
             endDate,
             progress: progress || 0,
             hasMilestone: hasMilestone || false
-        });
+        };
+        if (color) act.color = color;
+        phase.activities.push(act);
         this.saveAndRender();
         App.UI.toast('Attività aggiunta');
     },
@@ -233,6 +242,38 @@ App.Actions = {
         await App.Storage.save(clone);
         App.UI.toast('Progetto duplicato');
         App.UI.renderDashboard();
+    },
+
+    restoreSnapshot(snapId) {
+        const project = App.getCurrentProject();
+        if (!project) return;
+
+        const snap = (project.snapshots || []).find(s => s.id === snapId);
+        if (!snap || !snap.data) return;
+
+        // Auto-backup dello stato corrente
+        const backupData = App.Utils.deepClone({
+            phases: project.phases,
+            steeringMilestones: project.steeringMilestones
+        });
+        project.snapshots = project.snapshots || [];
+        project.snapshots.push({
+            id: App.Utils.generateId('snap'),
+            name: 'Auto-backup prima del ripristino',
+            date: new Date().toISOString(),
+            data: backupData,
+            isBaseline: false
+        });
+
+        // Ripristina dati dallo snapshot
+        project.phases = App.Utils.deepClone(snap.data.phases || []);
+        project.steeringMilestones = App.Utils.deepClone(snap.data.steeringMilestones || []);
+
+        this.saveAndRender();
+        if (App.state.versionsPanelOpen) {
+            App.UI.renderVersionsPanel();
+        }
+        App.UI.toast('Snapshot ripristinato');
     },
 
     deleteSnapshot(snapId) {

@@ -59,6 +59,20 @@ App.Gantt = {
         marker.appendChild(arrowPoly);
         defs.appendChild(marker);
 
+        // Marker freccia critica (rosso)
+        const markerCrit = document.createElementNS(this.ns, 'marker');
+        markerCrit.setAttribute('id', 'dep-arrowhead-critical');
+        markerCrit.setAttribute('markerWidth', '5');
+        markerCrit.setAttribute('markerHeight', '4');
+        markerCrit.setAttribute('refX', '5');
+        markerCrit.setAttribute('refY', '2');
+        markerCrit.setAttribute('orient', 'auto');
+        const arrowPolyCrit = document.createElementNS(this.ns, 'polygon');
+        arrowPolyCrit.setAttribute('points', '0 0, 5 2, 0 4');
+        arrowPolyCrit.setAttribute('fill', '#e74c3c');
+        markerCrit.appendChild(arrowPolyCrit);
+        defs.appendChild(markerCrit);
+
         svg.appendChild(defs);
 
         // Style: hover effects
@@ -66,6 +80,8 @@ App.Gantt = {
         style.textContent = `
             .act-bar { transition: filter 0.15s ease, transform 0.15s ease; }
             .act-bar:hover { filter: url(#shadow-lift); transform: translateY(-2px); }
+            .reorder-grip { opacity: 0; transition: opacity 0.15s ease; }
+            .reorder-grip:hover { opacity: 1; }
         `;
         svg.appendChild(style);
 
@@ -79,6 +95,11 @@ App.Gantt = {
         this.renderPanelGrip(svg, layout);
         this.renderMonthGrips(svg, layout);
         this.renderSteeringRow(svg, project, layout);
+        // Calcolo cammino critico
+        this._criticalPath = (App.state.showCriticalPath && App.state.showDependencyArrows)
+            ? App.Dependencies.computeCriticalPath(project)
+            : null;
+
         if (App.state.showDependencyArrows) {
             this.renderDependencyArrows(svg, project, layout);
         }
@@ -358,24 +379,91 @@ App.Gantt = {
         for (const pl of layout.phaseLayouts) {
             const phaseH = pl.endY - pl.startY;
 
-            // Sfondo azzurro chiaro etichetta fase
-            this.rect(svg, phaseColX, pl.startY, G.phaseLabelWidth, phaseH, T.phaseLabelBg);
+            // Sfondo etichetta fase (custom o tema)
+            const phaseLabelColor = pl.phase.color ? App.Utils.lightenColor(pl.phase.color, 0.4) : T.phaseLabelBg;
+            this.rect(svg, phaseColX, pl.startY, G.phaseLabelWidth, phaseH, phaseLabelColor);
 
             // Etichetta fase (verticale)
             this.verticalText(svg, phaseLabelX, pl.startY + phaseH / 2,
                 pl.phase.label.toUpperCase(), 9, C.white, 'bold');
 
-            // Nome fase (nella riga sommario) - clickabile
-            const phaseNameEl = this.wrapText(svg, actNameX, pl.summaryY + G.phaseRowHeight / 2 + 4,
-                pl.phase.name, maxTextW, 10, C.primary, 'start', 'bold');
+            // Grip handle fase (6 dots)
+            const phaseGripX = actNameX;
+            const phaseGripY = pl.summaryY + G.phaseRowHeight / 2;
+            const gripG = document.createElementNS(this.ns, 'g');
+            gripG.setAttribute('class', 'reorder-grip');
+            gripG.setAttribute('data-drag', 'reorder-phase');
+            gripG.setAttribute('data-phase-id', pl.phase.id);
+            gripG.style.cursor = 'grab';
+            const dotR = 1.2;
+            const dotGap = 4;
+            for (let row = -1; row <= 1; row++) {
+                for (let col = 0; col <= 1; col++) {
+                    const dot = document.createElementNS(this.ns, 'circle');
+                    dot.setAttribute('cx', phaseGripX + col * dotGap);
+                    dot.setAttribute('cy', phaseGripY + row * dotGap);
+                    dot.setAttribute('r', dotR);
+                    dot.setAttribute('fill', '#aaa');
+                    gripG.appendChild(dot);
+                }
+            }
+            // Hit area trasparente
+            const gripHit = document.createElementNS(this.ns, 'rect');
+            gripHit.setAttribute('x', phaseGripX - 4);
+            gripHit.setAttribute('y', phaseGripY - 8);
+            gripHit.setAttribute('width', 16);
+            gripHit.setAttribute('height', 16);
+            gripHit.setAttribute('fill', 'transparent');
+            gripHit.setAttribute('data-drag', 'reorder-phase');
+            gripHit.setAttribute('data-phase-id', pl.phase.id);
+            gripHit.style.cursor = 'grab';
+            gripG.appendChild(gripHit);
+            svg.appendChild(gripG);
+
+            // Nome fase (nella riga sommario) - clickabile (shifted right for grip)
+            const shiftedActNameX = actNameX + 14;
+            const shiftedMaxTextW = maxTextW - 14;
+            const phaseNameEl = this.wrapText(svg, shiftedActNameX, pl.summaryY + G.phaseRowHeight / 2 + 4,
+                pl.phase.name, shiftedMaxTextW, 10, C.primary, 'start', 'bold');
             phaseNameEl.setAttribute('text-decoration', 'underline');
             phaseNameEl.setAttribute('data-id', pl.phase.id);
             phaseNameEl.style.cursor = 'pointer';
 
             // Nomi attività - clickabili
             for (const al of pl.activities) {
-                const actNameEl = this.wrapText(svg, actNameX, al.y + G.activityRowHeight / 2 + 4,
-                    al.activity.name, maxTextW, 9.5, '#404040', 'start', 'normal', true);
+                // Grip handle attività
+                const actGripY = al.y + G.activityRowHeight / 2;
+                const actGripG = document.createElementNS(this.ns, 'g');
+                actGripG.setAttribute('class', 'reorder-grip');
+                actGripG.setAttribute('data-drag', 'reorder-activity');
+                actGripG.setAttribute('data-activity-id', al.activity.id);
+                actGripG.setAttribute('data-phase-id', pl.phase.id);
+                actGripG.style.cursor = 'grab';
+                for (let row = -1; row <= 1; row++) {
+                    for (let col = 0; col <= 1; col++) {
+                        const dot = document.createElementNS(this.ns, 'circle');
+                        dot.setAttribute('cx', phaseGripX + col * dotGap);
+                        dot.setAttribute('cy', actGripY + row * dotGap);
+                        dot.setAttribute('r', dotR);
+                        dot.setAttribute('fill', '#ccc');
+                        actGripG.appendChild(dot);
+                    }
+                }
+                const actGripHit = document.createElementNS(this.ns, 'rect');
+                actGripHit.setAttribute('x', phaseGripX - 4);
+                actGripHit.setAttribute('y', actGripY - 8);
+                actGripHit.setAttribute('width', 16);
+                actGripHit.setAttribute('height', 16);
+                actGripHit.setAttribute('fill', 'transparent');
+                actGripHit.setAttribute('data-drag', 'reorder-activity');
+                actGripHit.setAttribute('data-activity-id', al.activity.id);
+                actGripHit.setAttribute('data-phase-id', pl.phase.id);
+                actGripHit.style.cursor = 'grab';
+                actGripG.appendChild(actGripHit);
+                svg.appendChild(actGripG);
+
+                const actNameEl = this.wrapText(svg, shiftedActNameX, al.y + G.activityRowHeight / 2 + 4,
+                    al.activity.name, shiftedMaxTextW, 9.5, '#404040', 'start', 'normal', true);
                 actNameEl.setAttribute('data-activity-id', al.activity.id);
                 actNameEl.setAttribute('data-phase-id', pl.phase.id);
                 actNameEl.style.cursor = 'pointer';
@@ -525,12 +613,14 @@ App.Gantt = {
                 const barY = pl.summaryY + (G.phaseRowHeight - G.summaryBarHeight) / 2;
                 const barW = Math.max(x2 - x1, 4);
 
+                const phaseColor = phase.color || T.phaseFill;
+
                 // Barra scura
-                this.rect(svg, x1, barY, barW, G.summaryBarHeight, T.phaseFill, phase.id);
+                this.rect(svg, x1, barY, barW, G.summaryBarHeight, phaseColor, phase.id);
 
                 // Triangolini alle estremità
-                this.summaryTriangle(svg, x1, barY + G.summaryBarHeight, 'left', T.phaseFill);
-                this.summaryTriangle(svg, x1 + barW, barY + G.summaryBarHeight, 'right', T.phaseFill);
+                this.summaryTriangle(svg, x1, barY + G.summaryBarHeight, 'left', phaseColor);
+                this.summaryTriangle(svg, x1 + barW, barY + G.summaryBarHeight, 'right', phaseColor);
             }
 
             // Barre attività
@@ -545,21 +635,31 @@ App.Gantt = {
                 const barY = al.y + (G.activityRowHeight - G.barHeight) / 2;
                 const barW = Math.max(x2 - x1, 4);
 
+                // Colori attività (custom o tema)
+                const actColor = act.color || T.activityFill;
+                const actBgColor = act.color ? App.Utils.lightenColor(act.color, 0.6) : T.activityBg;
+
                 // Gruppo attività per hover effect
                 const g = document.createElementNS(this.ns, 'g');
                 g.setAttribute('class', 'act-bar');
                 svg.appendChild(g);
 
-                // Sfondo azzurro chiaro (durata totale)
-                const bgRect = this.rect(g, x1, barY, barW, G.barHeight, T.activityBg, null, 3);
+                // Sfondo chiaro (durata totale)
+                const bgRect = this.rect(g, x1, barY, barW, G.barHeight, actBgColor, null, 3);
                 bgRect.setAttribute('data-bar-role', 'background');
                 bgRect.setAttribute('data-bar-act', act.id);
 
-                // Riempimento blu scuro (avanzamento)
+                // Evidenzia cammino critico
+                if (this._criticalPath && this._criticalPath.criticalActivityIds.has(act.id)) {
+                    bgRect.setAttribute('stroke', '#e74c3c');
+                    bgRect.setAttribute('stroke-width', '2');
+                }
+
+                // Riempimento scuro (avanzamento)
                 const progress = (act.progress || 0) / 100;
                 if (progress > 0) {
                     const progressW = barW * progress;
-                    const progRect = this.rect(g, x1, barY, progressW, G.barHeight, T.activityFill, null, 3);
+                    const progRect = this.rect(g, x1, barY, progressW, G.barHeight, actColor, null, 3);
                     progRect.setAttribute('data-bar-role', 'progress');
                     progRect.setAttribute('data-bar-act', act.id);
                 }
@@ -567,7 +667,7 @@ App.Gantt = {
                 // Percentuale avanzamento
                 if (act.progress > 0) {
                     const pctText = this.text(g, x1 + barW + 5, al.y + G.activityRowHeight / 2 + 3.5,
-                        act.progress + '%', 8, T.activityFill, 'start', '600');
+                        act.progress + '%', 8, actColor, 'start', '600');
                     pctText.setAttribute('data-bar-role', 'pct');
                     pctText.setAttribute('data-bar-act', act.id);
                 }
@@ -596,7 +696,7 @@ App.Gantt = {
                 // Milestone diamante alla fine
                 if (act.hasMilestone) {
                     this.diamond(g, x2, al.y + G.activityRowHeight / 2,
-                        G.milestoneSize - 2, T.milestone);
+                        G.milestoneSize - 2, act.color || T.milestone);
                 }
 
                 // Segmenti aggiuntivi
@@ -615,8 +715,8 @@ App.Gantt = {
                         sg.setAttribute('class', 'act-bar');
                         svg.appendChild(sg);
 
-                        // Sfondo
-                        const segBg = this.rect(sg, sx1, barY, segW, G.barHeight, T.activityBg, null, 3);
+                        // Sfondo (eredita colore attività)
+                        const segBg = this.rect(sg, sx1, barY, segW, G.barHeight, actBgColor, null, 3);
                         segBg.setAttribute('data-bar-role', 'background');
                         segBg.setAttribute('data-bar-act', act.id);
                         segBg.setAttribute('data-bar-seg', String(segIdx));
@@ -625,7 +725,7 @@ App.Gantt = {
                         const segProgress = (seg.progress || 0) / 100;
                         if (segProgress > 0) {
                             const segProgW = segW * segProgress;
-                            const segProgRect = this.rect(sg, sx1, barY, segProgW, G.barHeight, T.activityFill, null, 3);
+                            const segProgRect = this.rect(sg, sx1, barY, segProgW, G.barHeight, actColor, null, 3);
                             segProgRect.setAttribute('data-bar-role', 'progress');
                             segProgRect.setAttribute('data-bar-act', act.id);
                             segProgRect.setAttribute('data-bar-seg', String(segIdx));
@@ -634,7 +734,7 @@ App.Gantt = {
                         // Percentuale
                         if (seg.progress > 0) {
                             const segPctText = this.text(sg, sx1 + segW + 5, al.y + G.activityRowHeight / 2 + 3.5,
-                                seg.progress + '%', 8, T.activityFill, 'start', '600');
+                                seg.progress + '%', 8, actColor, 'start', '600');
                             segPctText.setAttribute('data-bar-role', 'pct');
                             segPctText.setAttribute('data-bar-act', act.id);
                             segPctText.setAttribute('data-bar-seg', String(segIdx));
@@ -667,7 +767,7 @@ App.Gantt = {
                         // Milestone diamante alla fine del segmento
                         if (seg.hasMilestone) {
                             this.diamond(sg, sx2, al.y + G.activityRowHeight / 2,
-                                G.milestoneSize - 2, T.milestone);
+                                G.milestoneSize - 2, act.color || T.milestone);
                         }
                     }
                 }
@@ -717,13 +817,14 @@ App.Gantt = {
                 const barW = Math.max(x2 - x1, 4);
 
                 // Barra fantasma tratteggiata
+                const baseStroke = baseAct.color || '#999';
                 const rect = document.createElementNS(this.ns, 'rect');
                 rect.setAttribute('x', x1);
                 rect.setAttribute('y', barY);
                 rect.setAttribute('width', barW);
                 rect.setAttribute('height', G.barHeight);
                 rect.setAttribute('fill', 'none');
-                rect.setAttribute('stroke', '#999');
+                rect.setAttribute('stroke', baseStroke);
                 rect.setAttribute('stroke-width', '1.5');
                 rect.setAttribute('stroke-dasharray', '4,3');
                 rect.setAttribute('opacity', '0.6');
@@ -928,14 +1029,23 @@ App.Gantt = {
     // === DEPENDENCY ARROWS ===
     renderDependencyArrows(svg, project, layout) {
         const arrows = App.Dependencies.getDependencyArrows(project, layout);
+        const cp = this._criticalPath;
         for (const a of arrows) {
             const d = this._depArrowPath(a.fromX, a.fromY, a.toX, a.toY, a.aboveToY, a.dropX);
             const path = document.createElementNS(this.ns, 'path');
             path.setAttribute('d', d);
             path.setAttribute('fill', 'none');
-            path.setAttribute('stroke', '#666');
-            path.setAttribute('stroke-width', '1.5');
-            path.setAttribute('marker-end', 'url(#dep-arrowhead)');
+
+            const isCritical = cp && cp.criticalArrows.has(a.predecessorId + '->' + a.dependentId);
+            if (isCritical) {
+                path.setAttribute('stroke', '#e74c3c');
+                path.setAttribute('stroke-width', '2.5');
+                path.setAttribute('marker-end', 'url(#dep-arrowhead-critical)');
+            } else {
+                path.setAttribute('stroke', '#666');
+                path.setAttribute('stroke-width', '1.5');
+                path.setAttribute('marker-end', 'url(#dep-arrowhead)');
+            }
             path.setAttribute('class', 'dep-arrow');
             svg.appendChild(path);
         }

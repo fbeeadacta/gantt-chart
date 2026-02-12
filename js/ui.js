@@ -359,6 +359,9 @@ App.UI = {
         // Aggiungi event listeners per double-click editing
         this.attachGanttListeners(container);
 
+        // Sync stato pulsante percorso critico
+        const critBtn = document.getElementById('btn-toggle-critical');
+        if (critBtn) critBtn.classList.toggle('tools-btn-active', App.state.showCriticalPath);
     },
 
     attachGanttListeners(container) {
@@ -576,12 +579,15 @@ App.UI = {
                 <label>Etichetta breve (pannello sinistro)</label>
                 <input type="text" id="input-phase-label" value="FASE ${nextNum}" class="form-input" />
             </div>
+            ${this._renderColorPicker('input-phase-color', '')}
         `, () => {
             const name = document.getElementById('input-phase-name').value.trim();
             const label = document.getElementById('input-phase-label').value.trim();
+            const color = document.getElementById('input-phase-color').value || undefined;
             if (!name) return;
-            addPhase(name, label || `FASE ${nextNum}`);
+            addPhase(name, label || `FASE ${nextNum}`, color);
         });
+        this._initColorPicker('input-phase-color');
     },
 
     // === Panel: Modifica Fase ===
@@ -600,14 +606,18 @@ App.UI = {
                 <label>Etichetta breve</label>
                 <input type="text" id="input-phase-label" value="${this.escapeAttr(phase.label)}" class="form-input" />
             </div>
+            ${this._renderColorPicker('input-phase-color', phase.color || '')}
         `, () => {
             phase.name = document.getElementById('input-phase-name').value.trim() || phase.name;
             phase.label = document.getElementById('input-phase-label').value.trim() || phase.label;
+            const color = document.getElementById('input-phase-color').value;
+            phase.color = color || undefined;
             App.Actions.saveAndRender();
         }, () => {
             project.phases = project.phases.filter(p => p.id !== phaseId);
             App.Actions.saveAndRender();
         });
+        this._initColorPicker('input-phase-color');
     },
 
     // === Panel: Nuova Attività ===
@@ -663,6 +673,7 @@ App.UI = {
                     <span>Milestone di fine (diamante)</span>
                 </label>
             </div>
+            ${this._renderColorPicker('input-act-color', '')}
             <details class="segments-collapsible">
                 <summary>Segmenti aggiuntivi</summary>
                 <div class="segments-collapsible-body">
@@ -713,7 +724,8 @@ App.UI = {
                 }
             });
 
-            addActivity(phaseId, name, startDate, endDate, progress, hasMilestone);
+            const color = document.getElementById('input-act-color').value || undefined;
+            addActivity(phaseId, name, startDate, endDate, progress, hasMilestone, color);
 
             // Applica segmenti e dipendenze all'attività appena creata
             const project = App.getCurrentProject();
@@ -735,6 +747,7 @@ App.UI = {
         this._initSegmentButtons();
         this._initDurationSync();
         this._initDependencyButtons(null);
+        this._initColorPicker('input-act-color');
     },
 
     // === Panel: Modifica Attività ===
@@ -787,6 +800,7 @@ App.UI = {
                     <span>Milestone di fine (diamante)</span>
                 </label>
             </div>
+            ${this._renderColorPicker('input-act-color', act.color || '')}
             <details class="segments-collapsible">
                 <summary>Segmenti aggiuntivi${(act.segments || []).length ? ` (${(act.segments || []).length})` : ''}</summary>
                 <div class="segments-collapsible-body">
@@ -829,6 +843,8 @@ App.UI = {
             act.endDate = document.getElementById('input-act-end').value;
             act.progress = parseInt(document.getElementById('input-act-progress').value);
             act.hasMilestone = document.getElementById('input-act-milestone').checked;
+            const actColorVal = document.getElementById('input-act-color').value;
+            act.color = actColorVal || undefined;
 
             // Raccolta segmenti
             const segRows = document.querySelectorAll('#segments-container .segment-row');
@@ -887,6 +903,7 @@ App.UI = {
         this._initSegmentButtons();
         this._initDurationSync();
         this._initDependencyButtons(actId);
+        this._initColorPicker('input-act-color');
     },
 
     _initDurationSync() {
@@ -1360,6 +1377,9 @@ App.UI = {
                     <div class="version-date">${snapDate}</div>
                 </div>
                 <div class="version-actions">
+                    <button class="btn-small btn-restore" onclick="restoreSnapshot('${snap.id}')" title="Ripristina">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 4v6h6"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
+                    </button>
                     <label class="toggle-switch" title="Baseline">
                         <input type="checkbox" ${snap.isBaseline ? 'checked' : ''} onchange="setBaseline('${snap.id}')" />
                         <span class="toggle-slider"></span>
@@ -1419,6 +1439,17 @@ App.UI = {
                 <span class="toggle-slider"></span>
             </label>
         </div>`;
+        if (App.state.showDependencyArrows) {
+            html += `<div class="deps-toggle-row">
+                <span>Percorso critico</span>
+                <label class="toggle-switch">
+                    <input type="checkbox" id="deps-critical-toggle"
+                        ${App.state.showCriticalPath ? 'checked' : ''}
+                        onchange="toggleCriticalPath()" />
+                    <span class="toggle-slider"></span>
+                </label>
+            </div>`;
+        }
 
         // Form nuova dipendenza
         const actOptions = this._getDepsPanelActivityOptions(project);
@@ -1796,6 +1827,56 @@ App.UI = {
     closeSettingsPanel() {
         document.getElementById('settings-panel').classList.remove('open');
         document.getElementById('settings-backdrop').classList.remove('visible');
+    },
+
+    // === COLOR PICKER ===
+    _renderColorPicker(fieldId, currentColor) {
+        const presets = App.COLOR_PRESETS;
+        const hasColor = !!currentColor;
+        const colorLabel = hasColor ? ` <span class="color-current-dot" style="background:${currentColor};"></span>` : '';
+        const presetHtml = presets.map(c =>
+            `<div class="color-preset${c === currentColor ? ' selected' : ''}" data-color="${c}" style="background:${c};" title="${c}"></div>`
+        ).join('');
+
+        return `<details class="segments-collapsible"${hasColor ? ' open' : ''}>
+            <summary>Colore${colorLabel}</summary>
+            <div class="segments-collapsible-body">
+                <div class="color-picker-group" id="${fieldId}-group">
+                    <div class="color-picker-row">
+                        <div class="color-preset color-preset-none${!hasColor ? ' selected' : ''}" data-color="" title="Tema default">
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/></svg>
+                        </div>
+                        ${presetHtml}
+                        <input type="color" id="${fieldId}-custom" value="${currentColor || '#1a3a5c'}" class="color-custom-input" title="Colore personalizzato" />
+                    </div>
+                    <input type="hidden" id="${fieldId}" value="${currentColor || ''}" />
+                </div>
+            </div>
+        </details>`;
+    },
+
+    _initColorPicker(fieldId) {
+        const group = document.getElementById(fieldId + '-group');
+        const hidden = document.getElementById(fieldId);
+        const customInput = document.getElementById(fieldId + '-custom');
+        if (!group || !hidden) return;
+
+        group.addEventListener('click', (e) => {
+            const preset = e.target.closest('.color-preset');
+            if (!preset) return;
+            const color = preset.getAttribute('data-color');
+            hidden.value = color;
+            group.querySelectorAll('.color-preset').forEach(el => el.classList.remove('selected'));
+            preset.classList.add('selected');
+            if (customInput && color) customInput.value = color;
+        });
+
+        if (customInput) {
+            customInput.addEventListener('input', () => {
+                hidden.value = customInput.value;
+                group.querySelectorAll('.color-preset').forEach(el => el.classList.remove('selected'));
+            });
+        }
     },
 
     // === HELPERS ===
