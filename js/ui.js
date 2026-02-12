@@ -1689,12 +1689,49 @@ App.UI = {
         App.state.currentView = view;
         document.getElementById('dashboard-view').style.display = view === 'dashboard' ? '' : 'none';
         document.getElementById('gantt-view').style.display = view === 'gantt' ? 'flex' : 'none';
+        document.getElementById('global-gantt-view').style.display = view === 'global-gantt' ? 'flex' : 'none';
 
         if (view === 'dashboard') {
             this.renderDashboard();
         } else if (view === 'gantt') {
             this.renderGanttView();
+        } else if (view === 'global-gantt') {
+            this.renderGlobalGanttView();
         }
+    },
+
+    renderGlobalGanttView() {
+        // Filtra progetti con almeno una fase con attività
+        const projects = App.state.projects
+            .filter(p => p.phases && p.phases.some(ph => ph.activities && ph.activities.length > 0))
+            .sort((a, b) => {
+                const aMin = this._getProjectMinDate(a);
+                const bMin = this._getProjectMinDate(b);
+                if (!aMin && !bMin) return 0;
+                if (!aMin) return 1;
+                if (!bMin) return -1;
+                return aMin - bMin;
+            });
+
+        const container = document.getElementById('global-gantt-svg-container');
+
+        if (projects.length === 0) {
+            container.innerHTML = '<div style="text-align:center;padding:48px;color:var(--gray-400);font-size:15px;">Nessun progetto con attività da visualizzare</div>';
+            return;
+        }
+
+        App.GanttGlobal.render(projects, container);
+
+        // Sync bottoni zoom
+        const unit = App.state.globalGanttTimelineUnit || 'month';
+        ['week', 'month', 'quarter'].forEach(u => {
+            const btn = document.getElementById('global-zoom-' + u);
+            if (btn) btn.classList.toggle('active', u === unit);
+        });
+
+        // Sync label espandi/comprimi
+        const label = document.getElementById('global-expand-label');
+        if (label) label.textContent = App.state.globalGanttExpanded ? 'Comprimi' : 'Espandi';
     },
 
     // === THEME ===

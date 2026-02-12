@@ -303,6 +303,35 @@ function toggleDependencyArrows() {
     }
 }
 
+// Portfolio (Global Gantt)
+function openGlobalGantt() {
+    App.UI.showView('global-gantt');
+}
+
+function backToDashboardFromGlobal() {
+    App.UI.showView('dashboard');
+}
+
+function toggleGlobalGanttExpanded() {
+    App.state.globalGanttExpanded = !App.state.globalGanttExpanded;
+    App.UI.renderGlobalGanttView();
+}
+
+function setGlobalTimelineZoom(unit) {
+    if (unit === App.state.globalGanttTimelineUnit) return;
+    App.state.globalGanttTimelineUnit = unit;
+    App.state.globalGanttMonthWidth = null;
+    App.UI.renderGlobalGanttView();
+}
+
+function exportGlobalSVG() {
+    App.Exporter.exportGlobalSVG();
+}
+
+function exportGlobalPNG() {
+    App.Exporter.exportGlobalPNG();
+}
+
 // Export
 function exportSVG() {
     App.Exporter.exportSVG();
@@ -366,6 +395,9 @@ document.addEventListener('keydown', (e) => {
         }
         if (document.getElementById('deps-panel').classList.contains('open')) {
             App.UI.toggleDepsPanel();
+        }
+        if (App.state.currentView === 'global-gantt') {
+            App.UI.showView('dashboard');
         }
     }
 });

@@ -19,7 +19,10 @@ const App = {
         dashboardSort: 'lastSaved',    // 'nameAsc' | 'nameDesc' | 'lastSaved' | 'startDate'
         dashboardViewMode: 'grid',     // 'grid' | 'list'
         dashboardClientFilter: '',      // '' = tutti, oppure nome cliente
-        timelineUnit: 'month'           // 'week' | 'month' | 'quarter'
+        timelineUnit: 'month',           // 'week' | 'month' | 'quarter'
+        globalGanttExpanded: false,      // compatto vs espanso nel portfolio
+        globalGanttTimelineUnit: 'month', // zoom indipendente per portfolio
+        globalGanttMonthWidth: null      // null = auto-fit
     },
 
     DEFAULTS_THEME: {

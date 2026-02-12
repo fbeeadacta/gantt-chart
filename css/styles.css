@@ -1855,3 +1855,29 @@ body.dragging-ew *, body.dragging-grab * { cursor: inherit !important; }
     pointer-events: none;
     opacity: 0.7;
 }
+
+/* === GLOBAL GANTT (PORTFOLIO) VIEW === */
+#global-gantt-view {
+    height: 100vh;
+    flex-direction: column;
+}
+
+#global-gantt-svg-container {
+    flex: 1;
+    overflow: auto;
+    padding: 16px;
+    background: var(--gray-100);
+}
+
+#global-gantt-svg-container svg {
+    display: block;
+    margin: 0 auto;
+    background: white;
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-lg);
+    max-width: 100%;
+}
+
+#global-gantt-svg-container.zoomed svg {
+    max-width: none;
+}
