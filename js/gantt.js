@@ -126,7 +126,8 @@ App.Gantt = {
     computeLayout(project) {
         const G = App.GANTT;
         const range = App.Utils.getMonthRange(project);
-        const months = App.Utils.getMonthsList(range.start, range.end);
+        const unit = App.state.timelineUnit || 'month';
+        const months = App.Utils.getTimePeriods(unit, range.start, range.end);
 
         const timelineX = App.state.leftPanelWidth || G.leftPanelWidth;
         const monthCount = months.length;
@@ -211,66 +212,63 @@ App.Gantt = {
             steeringY,
             phaseLayouts,
             totalHeight: currentY,
-            headerY: G.padding.top
+            headerY: G.padding.top,
+            timelineUnit: unit
         };
     },
 
     dateToX(date, layout) {
-        const { months, timelineX, monthWidth } = layout;
-        if (months.length === 0) return timelineX;
+        const { months: periods, timelineX, monthWidth: pw } = layout;
+        if (!periods.length) return timelineX;
 
-        // Trova l'indice del mese in cui cade la data
-        const y = date.getFullYear();
-        const m = date.getMonth();
+        // Trova il periodo che contiene questa data
         let idx = -1;
-        for (let i = 0; i < months.length; i++) {
-            if (months[i].year === y && months[i].month === m) { idx = i; break; }
+        for (let i = 0; i < periods.length; i++) {
+            const pStart = periods[i].date;
+            const pEnd = (i < periods.length - 1)
+                ? periods[i + 1].date
+                : new Date(pStart.getTime() + periods[i].daysInPeriod * 86400000);
+            if (date >= pStart && date < pEnd) { idx = i; break; }
         }
 
         if (idx === -1) {
-            // Data prima del primo mese
-            const first = months[0].date;
-            if (date < first) {
-                const daysInFirst = new Date(first.getFullYear(), first.getMonth() + 1, 0).getDate();
-                const dayOff = App.Utils.daysBetween(first, date); // negativo
-                return timelineX + (dayOff / daysInFirst) * monthWidth;
+            // Data prima del primo periodo
+            if (date < periods[0].date) {
+                const dayOff = App.Utils.daysBetween(periods[0].date, date);
+                return timelineX + (dayOff / periods[0].daysInPeriod) * pw;
             }
-            // Data dopo l'ultimo mese
-            const last = months[months.length - 1];
-            const daysInLast = new Date(last.year, last.month + 1, 0).getDate();
-            const startOfLast = new Date(last.year, last.month, 1);
-            const dayOff = App.Utils.daysBetween(startOfLast, date);
-            return timelineX + (months.length - 1) * monthWidth + (dayOff / daysInLast) * monthWidth;
+            // Data dopo l'ultimo periodo
+            const last = periods[periods.length - 1];
+            const dayOff = App.Utils.daysBetween(last.date, date);
+            return timelineX + (periods.length - 1) * pw + (dayOff / last.daysInPeriod) * pw;
         }
 
-        const daysInMonth = new Date(y, m + 1, 0).getDate();
-        const dayOfMonth = date.getDate() - 1; // 0-based
-        return timelineX + idx * monthWidth + (dayOfMonth / daysInMonth) * monthWidth;
+        const p = periods[idx];
+        const dayOff = App.Utils.daysBetween(p.date, date);
+        return timelineX + idx * pw + (dayOff / p.daysInPeriod) * pw;
     },
 
     xToDate(x, layout) {
-        const { months, timelineX, monthWidth } = layout;
-        if (months.length === 0 || monthWidth <= 0) return new Date(layout.range.start);
+        const { months: periods, timelineX, monthWidth: pw } = layout;
+        if (!periods.length || pw <= 0) return new Date(layout.range.start);
 
         const relX = x - timelineX;
-        const monthIdx = Math.floor(relX / monthWidth);
-        const frac = (relX / monthWidth) - monthIdx;
+        const periodIdx = Math.floor(relX / pw);
+        const frac = (relX / pw) - periodIdx;
+        const ci = Math.max(0, Math.min(periods.length - 1, periodIdx));
+        const p = periods[ci];
 
-        // Clamp all'intervallo dei mesi
-        const clampedIdx = Math.max(0, Math.min(months.length - 1, monthIdx));
-        const mEntry = months[clampedIdx];
-        const daysInMonth = new Date(mEntry.year, mEntry.month + 1, 0).getDate();
-
-        let dayOfMonth;
-        if (monthIdx < 0) {
-            dayOfMonth = Math.round((monthIdx + frac) * daysInMonth);
-        } else if (monthIdx >= months.length) {
-            dayOfMonth = Math.round(frac * daysInMonth) + (monthIdx - months.length + 1) * daysInMonth;
+        let dayOff;
+        if (periodIdx < 0) {
+            dayOff = Math.round((periodIdx + frac) * p.daysInPeriod);
+        } else if (periodIdx >= periods.length) {
+            dayOff = Math.round(frac * p.daysInPeriod) + (periodIdx - periods.length + 1) * p.daysInPeriod;
         } else {
-            dayOfMonth = Math.round(frac * daysInMonth);
+            dayOff = Math.round(frac * p.daysInPeriod);
         }
 
-        const result = new Date(mEntry.year, mEntry.month, 1 + dayOfMonth);
+        const result = new Date(p.date);
+        result.setDate(result.getDate() + dayOff);
         return result;
     },
 
@@ -284,51 +282,87 @@ App.Gantt = {
         const C = App.COLORS;
         const T = this._theme;
         const headerY = layout.headerY;
+        const unit = layout.timelineUnit || 'month';
+        const periods = layout.months;
 
-        // Sfondo header anno (riga superiore)
-        const yearRowH = G.headerHeight / 2;
-        const monthRowH = G.headerHeight / 2;
-        this.rect(svg, layout.timelineX, headerY, layout.timelineWidth, yearRowH, T.headerBg);
-        // Sfondo header mesi (riga inferiore)
-        this.rect(svg, layout.timelineX, headerY + yearRowH, layout.timelineWidth, monthRowH, C.headerMonthBg);
+        // Sfondo header riga superiore (blu) e inferiore (grigia)
+        const topRowH = G.headerHeight / 2;
+        const botRowH = G.headerHeight / 2;
+        this.rect(svg, layout.timelineX, headerY, layout.timelineWidth, topRowH, T.headerBg);
+        this.rect(svg, layout.timelineX, headerY + topRowH, layout.timelineWidth, botRowH, C.headerMonthBg);
 
-        // Anno e mesi
-        let prevYear = null;
-
-        for (let i = 0; i < layout.months.length; i++) {
-            const m = layout.months[i];
-            const x = this.monthToX(m.date, layout);
-            const nextDate = i < layout.months.length - 1
-                ? layout.months[i + 1].date
-                : new Date(m.date.getFullYear(), m.date.getMonth() + 1, 1);
-            const nextX = this.dateToX(nextDate, layout);
-            const colW = nextX - x;
-
-            // Mese
-            this.text(svg, x + colW / 2, headerY + yearRowH + monthRowH / 2 + 4,
-                m.label, 10, '#000000', 'middle', 'normal');
-
-            // Separatore verticale bianco semi-trasparente tra colonne mese (solo riga mesi)
-            if (i > 0) {
-                const sep = this.line(svg, x, headerY + yearRowH, x, headerY + G.headerHeight, '#FFFFFF', 0.7);
-                sep.setAttribute('opacity', '0.3');
+        if (unit === 'week') {
+            // Settimane: header identico ai mesi (anno sopra, mesi sotto) ma colonne settimanali
+            // Riga inferiore: nomi mese che spannano le settimane contenute
+            let prevMonth = null;
+            for (let i = 0; i < periods.length; i++) {
+                const p = periods[i];
+                const monthKey = p.year + '-' + p.month;
+                if (monthKey !== prevMonth) {
+                    const x = layout.timelineX + i * layout.monthWidth;
+                    let groupEndIdx = i + 1;
+                    while (groupEndIdx < periods.length && (periods[groupEndIdx].year + '-' + periods[groupEndIdx].month) === monthKey) {
+                        groupEndIdx++;
+                    }
+                    const groupW = (groupEndIdx - i) * layout.monthWidth;
+                    this.text(svg, x + groupW / 2, headerY + topRowH + botRowH / 2 + 4,
+                        App.MONTHS_IT[p.month], 10, '#000000', 'middle', 'normal');
+                    // Separatore verticale bianco tra gruppi mese
+                    if (prevMonth !== null) {
+                        const sep = this.line(svg, x, headerY + topRowH, x, headerY + G.headerHeight, '#FFFFFF', 0.7);
+                        sep.setAttribute('opacity', '0.3');
+                    }
+                    prevMonth = monthKey;
+                }
             }
 
-            // Anno (solo al cambio anno o primo mese)
-            if (m.year !== prevYear) {
-                // Calcola larghezza gruppo anno
-                let yearEndX = nextX;
-                for (let j = i + 1; j < layout.months.length; j++) {
-                    if (layout.months[j].year !== m.year) break;
-                    const nd = j < layout.months.length - 1
-                        ? layout.months[j + 1].date
-                        : new Date(layout.months[j].date.getFullYear(), layout.months[j].date.getMonth() + 1, 1);
-                    yearEndX = this.dateToX(nd, layout);
+            // Riga superiore: anno che spanna i mesi
+            let prevYear = null;
+            for (let i = 0; i < periods.length; i++) {
+                const p = periods[i];
+                if (p.year !== prevYear) {
+                    const x = layout.timelineX + i * layout.monthWidth;
+                    let groupEndIdx = i + 1;
+                    while (groupEndIdx < periods.length && periods[groupEndIdx].year === p.year) {
+                        groupEndIdx++;
+                    }
+                    const groupW = (groupEndIdx - i) * layout.monthWidth;
+                    this.text(svg, x + groupW / 2, headerY + topRowH / 2 + 5,
+                        String(p.year), 11, C.white, 'middle', 'bold');
+                    prevYear = p.year;
                 }
-                const yearW = yearEndX - x;
-                this.text(svg, x + yearW / 2, headerY + yearRowH / 2 + 5,
-                    String(m.year), 11, C.white, 'middle', 'bold');
-                prevYear = m.year;
+            }
+        } else {
+            // Mesi e Trimestri: riga inferiore = label periodo, riga superiore = anno
+            for (let i = 0; i < periods.length; i++) {
+                const p = periods[i];
+                const x = layout.timelineX + i * layout.monthWidth;
+                const colW = layout.monthWidth;
+
+                this.text(svg, x + colW / 2, headerY + topRowH + botRowH / 2 + 4,
+                    p.label, 10, '#000000', 'middle', 'normal');
+
+                if (i > 0) {
+                    const sep = this.line(svg, x, headerY + topRowH, x, headerY + G.headerHeight, '#FFFFFF', 0.7);
+                    sep.setAttribute('opacity', '0.3');
+                }
+            }
+
+            // Riga superiore: anno
+            let prevYear = null;
+            for (let i = 0; i < periods.length; i++) {
+                const p = periods[i];
+                if (p.year !== prevYear) {
+                    const x = layout.timelineX + i * layout.monthWidth;
+                    let groupEndIdx = i + 1;
+                    while (groupEndIdx < periods.length && periods[groupEndIdx].year === p.year) {
+                        groupEndIdx++;
+                    }
+                    const groupW = (groupEndIdx - i) * layout.monthWidth;
+                    this.text(svg, x + groupW / 2, headerY + topRowH / 2 + 5,
+                        String(p.year), 11, C.white, 'middle', 'bold');
+                    prevYear = p.year;
+                }
             }
         }
 
@@ -481,20 +515,24 @@ App.Gantt = {
         const G = App.GANTT;
         const C = App.COLORS;
         const topY = layout.headerY + G.headerHeight;
+        const unit = layout.timelineUnit || 'month';
+        const periods = layout.months;
 
         // Bordo inferiore griglia (ultima fase, linea continua)
         const lastPhase = layout.phaseLayouts[layout.phaseLayouts.length - 1];
         const gridBottomY = lastPhase ? lastPhase.endY : layout.totalHeight;
 
-        // Linee verticali per ogni mese (si fermano al bordo inferiore)
-        let prevYear = null;
-        for (const m of layout.months) {
-            const x = this.monthToX(m.date, layout);
-            const isYearBound = m.year !== prevYear && prevYear !== null;
+        // Linee verticali per ogni periodo
+        for (let i = 0; i < periods.length; i++) {
+            const x = layout.timelineX + i * layout.monthWidth;
+            const isUpperBound = (i > 0) && (
+                unit === 'week'
+                    ? periods[i].month !== periods[i - 1].month
+                    : periods[i].year !== periods[i - 1].year
+            );
             this.line(svg, x, topY, x, gridBottomY,
-                isYearBound ? C.yearLine : C.gridLine,
-                isYearBound ? 1.5 : 0.5);
-            prevYear = m.year;
+                isUpperBound ? C.yearLine : C.gridLine,
+                isUpperBound ? 1.5 : 0.5);
         }
 
         // Linea verticale di chiusura dopo l'ultimo mese

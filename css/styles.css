@@ -1297,6 +1297,10 @@ body {
     #tools-panel .tools-btn span {
         display: none;
     }
+
+    #tools-panel .tools-zoom-group {
+        display: none;
+    }
 }
 
 /* === DRAG CURSORS === */
@@ -1573,6 +1577,50 @@ body.dragging-ew *, body.dragging-grab * { cursor: inherit !important; }
 }
 #tools-panel.collapsed .tools-separator {
     margin: 4px 2px;
+}
+
+/* === ZOOM GROUP === */
+.tools-zoom-group {
+    padding: 8px 12px;
+    margin-top: auto;
+    border-top: 1px solid var(--gray-200);
+}
+.tools-zoom-label {
+    font-size: 11px;
+    color: var(--gray-500);
+    text-transform: uppercase;
+    margin-bottom: 6px;
+    display: block;
+}
+.tools-zoom-buttons {
+    display: flex;
+    gap: 0;
+    border: 1px solid var(--gray-300);
+    border-radius: 6px;
+    overflow: hidden;
+}
+.tools-zoom-btn {
+    flex: 1;
+    padding: 4px 0;
+    font-size: 11px;
+    border: none;
+    background: white;
+    color: var(--gray-600);
+    cursor: pointer;
+    border-right: 1px solid var(--gray-300);
+}
+.tools-zoom-btn:last-child {
+    border-right: none;
+}
+.tools-zoom-btn:hover {
+    background: var(--gray-100);
+}
+.tools-zoom-btn.active {
+    background: var(--primary);
+    color: white;
+}
+#tools-panel.collapsed .tools-zoom-group {
+    display: none;
 }
 
 /* === DEPENDENCY ROW (modal) === */

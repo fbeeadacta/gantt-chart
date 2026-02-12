@@ -18,7 +18,8 @@ const App = {
         dashboardSearch: '',
         dashboardSort: 'lastSaved',    // 'nameAsc' | 'nameDesc' | 'lastSaved' | 'startDate'
         dashboardViewMode: 'grid',     // 'grid' | 'list'
-        dashboardClientFilter: ''      // '' = tutti, oppure nome cliente
+        dashboardClientFilter: '',      // '' = tutti, oppure nome cliente
+        timelineUnit: 'month'           // 'week' | 'month' | 'quarter'
     },
 
     DEFAULTS_THEME: {

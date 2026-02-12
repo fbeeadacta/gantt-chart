@@ -247,6 +247,23 @@ function toggleToolsPanel() {
     try { localStorage.setItem('gantt_toolsPanelCollapsed', collapsed ? '1' : '0'); } catch(e) {}
 }
 
+// Timeline zoom
+function setTimelineZoom(unit) {
+    if (unit === App.state.timelineUnit) return;
+    App.state.timelineUnit = unit;
+    App.state.monthWidth = null; // Reset a auto-fit al cambio unità
+    const project = App.getCurrentProject();
+    if (project) {
+        try {
+            localStorage.setItem('gantt_timelineUnit_' + project.id, unit);
+            localStorage.removeItem('gantt_monthWidth_' + project.id);
+        } catch(e) {}
+    }
+    if (App.state.currentView === 'gantt') {
+        App.UI.renderGanttView();
+    }
+}
+
 // Dependencies panel
 function toggleDepsPanel() {
     App.UI.toggleDepsPanel();
@@ -260,22 +277,9 @@ function toggleCriticalPath() {
     } else {
         App.state.showCriticalPath = !App.state.showCriticalPath;
     }
-    // Attiva automaticamente le frecce se si attiva il percorso critico
-    if (App.state.showCriticalPath && !App.state.showDependencyArrows) {
-        App.state.showDependencyArrows = true;
-        try { localStorage.setItem('gantt_showDependencyArrows', '1'); } catch(e) {}
-    }
     try { localStorage.setItem('gantt_showCriticalPath', App.state.showCriticalPath ? '1' : '0'); } catch(e) {}
-    _updateCriticalPathButton();
     if (App.state.currentView === 'gantt') {
         App.UI.renderGanttView();
-    }
-}
-
-function _updateCriticalPathButton() {
-    const btn = document.getElementById('btn-toggle-critical');
-    if (btn) {
-        btn.classList.toggle('tools-btn-active', App.state.showCriticalPath);
     }
 }
 
@@ -287,7 +291,13 @@ function toggleDependencyArrows() {
     } else {
         App.state.showDependencyArrows = !App.state.showDependencyArrows;
     }
+    // Disattiva percorso critico se si disattivano le frecce
+    if (!App.state.showDependencyArrows && App.state.showCriticalPath) {
+        App.state.showCriticalPath = false;
+        try { localStorage.setItem('gantt_showCriticalPath', '0'); } catch(e) {}
+    }
     try { localStorage.setItem('gantt_showDependencyArrows', App.state.showDependencyArrows ? '1' : '0'); } catch(e) {}
+    App.UI.renderDepsPanel();
     if (App.state.currentView === 'gantt') {
         App.UI.renderGanttView();
     }

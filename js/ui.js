@@ -359,9 +359,12 @@ App.UI = {
         // Aggiungi event listeners per double-click editing
         this.attachGanttListeners(container);
 
-        // Sync stato pulsante percorso critico
-        const critBtn = document.getElementById('btn-toggle-critical');
-        if (critBtn) critBtn.classList.toggle('tools-btn-active', App.state.showCriticalPath);
+        // Sync stato bottoni zoom timeline
+        const unit = App.state.timelineUnit || 'month';
+        ['week', 'month', 'quarter'].forEach(u => {
+            const btn = document.getElementById('zoom-' + u);
+            if (btn) btn.classList.toggle('active', u === unit);
+        });
     },
 
     attachGanttListeners(container) {

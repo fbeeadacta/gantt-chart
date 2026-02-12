@@ -90,11 +90,71 @@ App.Utils = {
                 year: current.getFullYear(),
                 month: current.getMonth(),
                 label: App.MONTHS_IT[current.getMonth()],
-                date: new Date(current)
+                date: new Date(current),
+                daysInPeriod: new Date(current.getFullYear(), current.getMonth() + 1, 0).getDate()
             });
             current.setMonth(current.getMonth() + 1);
         }
         return months;
+    },
+
+    getISOWeek(date) {
+        const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+        d.setUTCDate(d.getUTCDate() + 4 - (d.getUTCDay() || 7));
+        const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+        return Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
+    },
+
+    getWeeksList(start, end) {
+        const weeks = [];
+        // Snap al lunedì precedente (o uguale) a start
+        const current = new Date(start.getFullYear(), start.getMonth(), start.getDate());
+        const dow = current.getDay();
+        const diff = dow === 0 ? -6 : 1 - dow; // lunedì = 1
+        current.setDate(current.getDate() + diff);
+
+        while (current <= end) {
+            const wn = this.getISOWeek(current);
+            weeks.push({
+                year: current.getFullYear(),
+                month: current.getMonth(),
+                label: 'W' + wn,
+                date: new Date(current),
+                daysInPeriod: 7
+            });
+            current.setDate(current.getDate() + 7);
+        }
+        return weeks;
+    },
+
+    getQuartersList(start, end) {
+        const quarters = [];
+        // Snap all'inizio del trimestre di start (mese 0, 3, 6, 9)
+        const qMonth = Math.floor(start.getMonth() / 3) * 3;
+        const current = new Date(start.getFullYear(), qMonth, 1);
+
+        while (current <= end) {
+            const qNum = Math.floor(current.getMonth() / 3) + 1;
+            const nextQ = new Date(current.getFullYear(), current.getMonth() + 3, 1);
+            const daysInQ = Math.round((nextQ - current) / 86400000);
+            quarters.push({
+                year: current.getFullYear(),
+                month: current.getMonth(),
+                label: 'Q' + qNum,
+                date: new Date(current),
+                daysInPeriod: daysInQ
+            });
+            current.setMonth(current.getMonth() + 3);
+        }
+        return quarters;
+    },
+
+    getTimePeriods(unit, start, end) {
+        switch (unit) {
+            case 'week': return this.getWeeksList(start, end);
+            case 'quarter': return this.getQuartersList(start, end);
+            default: return this.getMonthsList(start, end);
+        }
     },
 
     getPhaseRange(phase) {

@@ -77,6 +77,14 @@ App.Actions = {
             App.state.svgHeight = null;
         }
 
+        // Ripristina timelineUnit da localStorage
+        try {
+            const savedUnit = localStorage.getItem('gantt_timelineUnit_' + projectId);
+            App.state.timelineUnit = (savedUnit === 'week' || savedUnit === 'quarter') ? savedUnit : 'month';
+        } catch(e) {
+            App.state.timelineUnit = 'month';
+        }
+
         App.History.init(projectId);
         App.UI.showView('gantt');
     },
@@ -88,6 +96,7 @@ App.Actions = {
         App.state.monthWidth = null;
         App.state.leftPanelWidth = null;
         App.state.svgHeight = null;
+        App.state.timelineUnit = 'month';
         App.UI.showView('dashboard');
     },
 
