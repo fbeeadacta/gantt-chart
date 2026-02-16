@@ -30,7 +30,7 @@ Global namespace pattern: all modules attach to a single `App` object defined in
 8. `drag.js` — Interactive drag system for activity bars, segments, milestones, and layout resize handles
 9. `history.js` — Undo/redo stack (max 30 states), snapshots of project data, pause mechanism during restore
 10. `ui.js` — Dashboard rendering (grid/list views, search, sort, client filter), modal system, settings panels, versions panel, toast notifications, planning view rendering
-11. `exporter.js` — SVG and PNG (3840×2160) export via Canvas API
+11. `exporter.js` — SVG, PNG (3840×2160), and CSV export
 12. `actions.js` — Business logic coordinator: CRUD for projects/phases/activities/milestones/snapshots + `duplicateProject()` with deep clone and ID remapping (including collaborators and planning data)
 13. `main.js` — DOMContentLoaded init, 20+ window-scope functions bound to `onclick` handlers, keyboard shortcuts
 
@@ -47,6 +47,7 @@ User onclick → window function (main.js) → App.Actions (mutate state) → Ap
 - **Fallback:** localStorage for browsers without FS Access API
 - Auto-save on every modification via `App.Actions.saveAndRender()` (immediate save + re-render)
 - File naming: `<sanitized project title>.gantt.json` via `App.Workspace.sanitizeFileName()`
+- **Auto-reconnect:** On page load, `App.Workspace.reconnect()` attempts to restore the saved DirectoryHandle. If the browser requires a user gesture for permission (typical after restart), a yellow warning banner appears at the top of the dashboard with a "Riconnetti" button. Clicking it triggers `requestPermission()` with the user gesture, then reloads projects. State tracked via `App.state._pendingHandle` and `App.state._showReconnectBanner`.
 
 ### Views
 
@@ -123,7 +124,7 @@ Three zoom levels controlled by `App.state.timelineUnit` (persisted per-project 
 - **`month`** — Italian month abbreviations (GEN, FEB, MAR...) — default
 - **`quarter`** — Quarters (Q1, Q2, Q3, Q4)
 
-Zoom controls are in the tools panel (Sett / Mese / Trim buttons). `App.Utils.getTimePeriods(unit, start, end)` generates the unified period list. When SVG width exceeds viewport, the container gets `.zoomed` class for horizontal scroll.
+Zoom controls are in the tools panel (Sett / Mese / Trim / Fit buttons). `App.Utils.getTimePeriods(unit, start, end)` generates the unified period list. When SVG width exceeds viewport, the container gets `.zoomed` class for horizontal scroll. The **Fit** button (`zoomToFit()`) resets `App.state.monthWidth = null` and removes the per-project localStorage key, reverting to `computeLayout()`'s auto-calculated width that fits the viewport.
 
 Per-project layout overrides (monthWidth, leftPanelWidth, svgHeight) are stored in `App.state` and persisted to localStorage with keys `gantt_monthWidth_<projectId>`, `gantt_leftPanelWidth_<projectId>`, `gantt_svgHeight_<projectId>`.
 
@@ -140,6 +141,10 @@ Per-project layout overrides (monthWidth, leftPanelWidth, svgHeight) are stored 
 - **Panel/month/bottom resize**: structural layout adjustments
 
 All drags snap to day boundaries via `xToDate()`→`dateToX()` round-trip. Escape cancels. A 300ms `_justDragged` flag prevents dblclick from firing after drag end.
+
+#### Inline activity name editing
+
+Double-clicking an activity **name text** in the left panel (x < `layout.timelineX`) triggers inline editing via `App.UI._startInlineEdit()`. An HTML `<input class="gantt-inline-input">` is positioned over the SVG `<text>` element using `getBoundingClientRect()` relative to `#gantt-svg-container`. Enter/blur saves, Escape cancels. Double-clicking the **activity bar** in the timeline area still opens the full edit modal as before.
 
 ### Dashboard (ui.js)
 
@@ -173,7 +178,7 @@ When an activity is dragged, `cascadeDependents()` BFS-propagates the date shift
 
 - IDs generated via `App.Utils.generateId(prefix)` with prefixes: `proj_`, `phase_`, `act_`, `ms_`, `snap_`
 - All UI event handlers are window-scope functions defined in `main.js`
-- Modals use a generic `App.UI.showModal()` / `App.UI.closeModal()` pattern; `_initSegmentButtons()` wires segment add/remove via event delegation after modal render
+- Modals use a generic `App.UI.showModal()` / `App.UI.closeModal()` pattern; `_initSegmentButtons()` wires segment add/remove via event delegation after modal render. Destructive confirmations use `App.UI.showConfirmDialog(message, onConfirm)` — a styled modal with "Annulla"/"Elimina" buttons (no native `confirm()`).
 - Settings panels use `App.UI.openSettingsPanel(title)` / `App.UI.closeSettingsPanel()` for slide-in panels (project options, global settings, theme, dependencies)
 - HTML escaping via `App.UI.escapeHtml()` and `App.UI.escapeAttr()` for XSS prevention
 - CSS uses custom properties for theming (colors, shadows, radii) defined in `:root`
@@ -183,7 +188,15 @@ When an activity is dragged, `cascadeDependents()` BFS-propagates the date shift
 
 ### Tools panel
 
-The Gantt view has a collapsible tools panel (toggle via `toggleToolsPanel()`, state persisted as `gantt_toolsPanelCollapsed`). Contains: version controls, today/dependency toggles, zoom level selector (Sett/Mese/Trim), and a button to open the planning view.
+The Gantt view has a collapsible tools panel (toggle via `toggleToolsPanel()`, state persisted as `gantt_toolsPanelCollapsed`). Contains: version controls, today/dependency toggles, zoom level selector (Sett/Mese/Trim/Fit), and a button to open the planning view.
+
+### Export (exporter.js)
+
+Three export formats available from the Gantt toolbar:
+
+- **SVG** — Serialized SVG with XML declaration, downloaded as `.svg`
+- **PNG** — 2× resolution (3840×2160) via Canvas API, downloaded as `.png`
+- **CSV** — Semicolon-separated (`;`) for Italian Excel locale, with UTF-8 BOM (`\uFEFF`). Columns: Fase, Etichetta, Attività, Inizio, Fine, Durata (gg), Avanzamento (%), Milestone. Activity segments are included as additional rows with " (segmento)" suffix. Downloaded as `<title>_attività.csv`.
 
 ### localStorage keys
 
