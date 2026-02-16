@@ -59,11 +59,18 @@ body {
 }
 
 .toolbar-brand {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
     font-size: 16px;
     font-weight: 700;
     margin-right: 16px;
     white-space: nowrap;
     letter-spacing: -0.3px;
+}
+
+.brand-icon {
+    flex-shrink: 0;
 }
 
 .toolbar-separator {
