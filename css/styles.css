@@ -2333,3 +2333,17 @@ body.dragging-dep, body.dragging-dep * { cursor: crosshair !important; }
     border-color: var(--primary-light);
     color: var(--primary);
 }
+
+/* === INLINE EDIT === */
+.gantt-inline-input {
+    position: absolute;
+    font-size: 13px;
+    font-family: inherit;
+    border: 1px solid var(--primary);
+    border-radius: 3px;
+    padding: 1px 4px;
+    outline: none;
+    box-shadow: 0 0 0 2px var(--primary-lighter);
+    z-index: 10;
+    background: white;
+}

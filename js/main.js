@@ -87,9 +87,9 @@ function createNewProject(title, client) {
 }
 
 function deleteProject(id) {
-    if (confirm('Eliminare questo progetto?')) {
+    App.UI.showConfirmDialog('Eliminare questo progetto?', () => {
         App.Actions.deleteProject(id);
-    }
+    });
 }
 
 function exportProject(id) {
@@ -273,6 +273,18 @@ function setTimelineZoom(unit) {
     }
 }
 
+// Zoom to fit
+function zoomToFit() {
+    App.state.monthWidth = null;
+    const project = App.getCurrentProject();
+    if (project) {
+        try { localStorage.removeItem('gantt_monthWidth_' + project.id); } catch(e) {}
+    }
+    if (App.state.currentView === 'gantt') {
+        App.UI.renderGanttView();
+    }
+}
+
 // Dependencies panel
 function toggleDepsPanel() {
     App.UI.toggleDepsPanel();
@@ -321,6 +333,10 @@ function exportPNG() {
     App.Exporter.exportPNG();
 }
 
+function exportCSV() {
+    App.Exporter.exportCSV();
+}
+
 // Versioning
 function createSnapshot(name) {
     App.Actions.createSnapshot(name);
@@ -335,15 +351,15 @@ function setBaseline(snapId) {
 }
 
 function restoreSnapshot(snapId) {
-    if (confirm('Ripristinare questo snapshot? Verrà creato un backup automatico dello stato corrente.')) {
+    App.UI.showConfirmDialog('Ripristinare questo snapshot? Verrà creato un backup automatico dello stato corrente.', () => {
         App.Actions.restoreSnapshot(snapId);
-    }
+    });
 }
 
 function deleteSnapshot(snapId) {
-    if (confirm('Eliminare questo snapshot?')) {
+    App.UI.showConfirmDialog('Eliminare questo snapshot?', () => {
         App.Actions.deleteSnapshot(snapId);
-    }
+    });
 }
 
 // Keyboard shortcuts

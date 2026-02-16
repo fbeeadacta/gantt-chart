@@ -390,6 +390,16 @@ App.UI = {
             const actId = target.getAttribute('data-activity-id') || parent?.getAttribute('data-activity-id');
             const phaseId = target.getAttribute('data-phase-id') || parent?.getAttribute('data-phase-id');
             if (actId && phaseId) {
+                // Check if click is on the activity name text in the left panel
+                const textEl = (target.tagName === 'text' || target.tagName === 'tspan') ? (target.tagName === 'tspan' ? parent : target) : null;
+                if (textEl && textEl.tagName === 'text') {
+                    const textX = parseFloat(textEl.getAttribute('x') || textEl.querySelector('tspan')?.getAttribute('x') || 0);
+                    const layout = App.Gantt.computeLayout(App.getCurrentProject());
+                    if (textX < layout.timelineX) {
+                        this._startInlineEdit(textEl, actId, phaseId, container);
+                        return;
+                    }
+                }
                 showEditActivityModal(phaseId, actId);
                 return;
             }
@@ -408,6 +418,63 @@ App.UI = {
                 return;
             }
         });
+    },
+
+    // === INLINE EDIT ===
+    _startInlineEdit(textEl, actId, phaseId, container) {
+        const project = App.getCurrentProject();
+        if (!project) return;
+        let act = null;
+        for (const ph of project.phases) {
+            const found = ph.activities.find(a => a.id === actId);
+            if (found) { act = found; break; }
+        }
+        if (!act) return;
+
+        // Position input over the SVG text element
+        const textRect = textEl.getBoundingClientRect();
+        const containerRect = container.getBoundingClientRect();
+
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.className = 'gantt-inline-input';
+        input.value = act.name;
+        input.style.left = (textRect.left - containerRect.left + container.scrollLeft) + 'px';
+        input.style.top = (textRect.top - containerRect.top + container.scrollTop - 2) + 'px';
+        input.style.width = Math.max(textRect.width + 20, 120) + 'px';
+        input.style.height = (textRect.height + 4) + 'px';
+
+        textEl.style.visibility = 'hidden';
+        container.style.position = 'relative';
+        container.appendChild(input);
+        input.focus();
+        input.select();
+
+        let saved = false;
+        const save = () => {
+            if (saved) return;
+            saved = true;
+            const newName = input.value.trim();
+            if (newName && newName !== act.name) {
+                act.name = newName;
+                App.Actions.saveAndRender();
+            } else {
+                textEl.style.visibility = '';
+            }
+            if (input.parentNode) input.remove();
+        };
+        const cancel = () => {
+            if (saved) return;
+            saved = true;
+            textEl.style.visibility = '';
+            if (input.parentNode) input.remove();
+        };
+
+        input.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') { e.preventDefault(); save(); }
+            if (e.key === 'Escape') { e.preventDefault(); cancel(); }
+        });
+        input.addEventListener('blur', save);
     },
 
     // === MODALS ===
@@ -440,10 +507,10 @@ App.UI = {
         }
         if (onDelete) {
             document.getElementById('modal-delete-btn').onclick = () => {
-                if (confirm('Sei sicuro di voler eliminare questo elemento?')) {
+                this.closeModal();
+                this.showConfirmDialog('Sei sicuro di voler eliminare questo elemento?', () => {
                     onDelete();
-                    this.closeModal();
-                }
+                });
             };
         }
 
@@ -452,6 +519,29 @@ App.UI = {
 
     closeModal() {
         document.getElementById('modal-overlay').classList.remove('visible');
+    },
+
+    showConfirmDialog(message, onConfirm) {
+        const overlay = document.getElementById('modal-overlay');
+        const modalTitle = document.getElementById('modal-title');
+        const modalBody = document.getElementById('modal-body');
+        const modalFooter = document.getElementById('modal-footer');
+
+        modalTitle.textContent = 'Conferma';
+        modalBody.innerHTML = `<p style="margin:8px 0;color:var(--gray-700);">${this.escapeHtml(message)}</p>`;
+        modalFooter.innerHTML = `
+            <div class="modal-footer-right">
+                <button class="btn btn-secondary" id="confirm-cancel-btn">Annulla</button>
+                <button class="btn btn-danger" id="confirm-ok-btn">Elimina</button>
+            </div>`;
+
+        overlay.classList.add('visible');
+
+        document.getElementById('confirm-cancel-btn').onclick = () => this.closeModal();
+        document.getElementById('confirm-ok-btn').onclick = () => {
+            this.closeModal();
+            onConfirm();
+        };
     },
 
     // === Modal: Nuovo Progetto ===
@@ -559,11 +649,11 @@ App.UI = {
         };
 
         document.getElementById('panel-opt-delete').onclick = () => {
-            if (confirm('Eliminare questo progetto?')) {
-                this.closeSettingsPanel();
+            this.closeSettingsPanel();
+            this.showConfirmDialog('Eliminare questo progetto?', () => {
                 App.Actions.deleteProject(project.id);
                 if (!fromDashboard) App.Actions.backToDashboard();
-            }
+            });
         };
     },
 
@@ -1824,10 +1914,10 @@ App.UI = {
         }
         if (onDelete) {
             document.getElementById('panel-delete-btn').onclick = () => {
-                if (confirm('Sei sicuro di voler eliminare questo elemento?')) {
+                this.closeSettingsPanel();
+                this.showConfirmDialog('Sei sicuro di voler eliminare questo elemento?', () => {
                     onDelete();
-                    this.closeSettingsPanel();
-                }
+                });
             };
         }
     },
