@@ -60,6 +60,7 @@ Three views controlled by `App.UI.showView(view)`:
 
 - **Ctrl+Z / Cmd+Z**: Undo
 - **Ctrl+Y / Cmd+Y / Ctrl+Shift+Z**: Redo
+- **Shift+Drag** (on activity bar): Create End→Start dependency between two activities
 - **Escape**: Close modal, settings panel, versions panel, or deps panel; cancel drag
 - Shortcuts are suppressed when focus is on input/textarea/select elements
 
@@ -135,6 +136,7 @@ Per-project layout overrides (monthWidth, leftPanelWidth, svgHeight) are stored 
 - **Activity bars**: move, resize-left, resize-right — identified by `data-drag` + `data-activity-id` attributes
 - **Segments**: same as activity bars, distinguished by `data-segment-idx` attribute; updates `act.segments[idx]` dates
 - **Steering milestones**: `data-drag="move-milestone"` + `data-ms-id` — moves the milestone date horizontally; visual feedback via `translate` on the `<g>` group
+- **Create dependency (Shift+drag)**: hold Shift and drag from any activity bar to another to create an End→Start dependency. Uses `type: 'create-dependency'` state with a temporary dashed SVG line (`#dep-arrowhead-drag` marker). Target detection via `document.elementFromPoint()` (checks `data-activity-id` and `data-bar-act` attributes). Target bar highlighted with `.dep-drop-target` class. On release: validates duplicates and circular dependencies (`hasCircularDependency()`), computes offset via `computeOffset()`, then calls `applyOwnDependencies()` + `cascadeDependents()` + `saveAndRender()`. Shift+drag on segments uses the parent activity ID. Cursor: `crosshair` via `body.dragging-dep` class.
 - **Panel/month/bottom resize**: structural layout adjustments
 
 All drags snap to day boundaries via `xToDate()`→`dateToX()` round-trip. Escape cancels. A 300ms `_justDragged` flag prevents dblclick from firing after drag end.
