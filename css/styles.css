@@ -1855,3 +1855,480 @@ body.dragging-ew *, body.dragging-grab * { cursor: inherit !important; }
     pointer-events: none;
     opacity: 0.7;
 }
+
+/* === PLANNING VIEW === */
+#planning-view {
+    height: 100vh;
+    flex-direction: column;
+}
+
+.planning-body {
+    display: flex;
+    flex: 1;
+    overflow: hidden;
+}
+
+#planning-pool {
+    width: 240px;
+    min-width: 240px;
+    border-right: 1px solid var(--gray-200);
+    overflow-y: auto;
+    padding: 16px;
+    background: white;
+}
+
+#planning-activities {
+    flex: 1;
+    overflow-y: auto;
+    padding: 16px 24px;
+    background: var(--gray-50);
+}
+
+/* Pool collaboratori */
+.pool-title {
+    font-weight: 600;
+    font-size: 13px;
+    color: var(--gray-600);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 12px;
+}
+
+.pool-card {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 10px;
+    background: var(--gray-50);
+    border: 1px solid var(--gray-200);
+    border-radius: var(--radius-sm);
+    margin-bottom: 6px;
+    cursor: grab;
+    transition: var(--transition);
+}
+
+.pool-card:hover {
+    border-color: var(--primary-light);
+    background: var(--primary-lighter);
+}
+
+.pool-card.dragging {
+    opacity: 0.4;
+}
+
+.pool-card-grip {
+    flex-shrink: 0;
+    cursor: grab;
+}
+
+.pool-card-info {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+}
+
+.pool-card-name {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--gray-800);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.pool-card-days {
+    font-size: 11px;
+    color: var(--gray-500);
+    display: flex;
+    align-items: center;
+    gap: 3px;
+}
+
+.pool-days-input {
+    width: 40px;
+    border: 1px solid transparent;
+    background: transparent;
+    font-size: 11px;
+    color: var(--gray-600);
+    padding: 1px 2px;
+    border-radius: 3px;
+    text-align: right;
+    -moz-appearance: textfield;
+}
+
+.pool-days-input::-webkit-outer-spin-button,
+.pool-days-input::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+
+.pool-days-input:hover {
+    border-color: var(--gray-300);
+    background: white;
+}
+
+.pool-days-input:focus {
+    outline: none;
+    border-color: var(--primary-light);
+    background: white;
+    color: var(--gray-800);
+}
+
+.pool-card-remove {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    padding: 0;
+    border: 1px solid transparent;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--gray-400);
+    font-size: 14px;
+    cursor: pointer;
+    transition: var(--transition);
+}
+
+.pool-card-remove:hover {
+    background: #fef2f2;
+    color: var(--danger);
+    border-color: #fecaca;
+}
+
+.pool-add-form {
+    margin-top: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.pool-add-form .pool-add-name {
+    font-size: 13px;
+    padding: 6px 8px;
+}
+
+.pool-add-row {
+    display: flex;
+    gap: 6px;
+}
+
+.pool-add-row .pool-add-days {
+    width: 64px;
+    font-size: 13px;
+    padding: 6px 8px;
+}
+
+.pool-add-row .pool-add-btn {
+    padding: 4px 10px;
+    font-size: 13px;
+}
+
+/* Phase groups */
+.planning-phase-group {
+    margin-bottom: 20px;
+}
+
+.planning-phase-title {
+    font-weight: 600;
+    font-size: 14px;
+    color: var(--gray-700);
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+    margin-bottom: 8px;
+    padding-bottom: 4px;
+    border-bottom: 2px solid var(--primary-light);
+}
+
+.planning-empty {
+    font-size: 13px;
+    color: var(--gray-400);
+    padding: 12px 0;
+    font-style: italic;
+}
+
+/* Activity cards */
+.planning-act-card {
+    background: white;
+    border: 1px solid var(--gray-200);
+    border-radius: var(--radius-md);
+    margin-bottom: 8px;
+    transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.planning-act-card.drag-over {
+    border-color: var(--primary);
+    box-shadow: 0 0 0 2px var(--primary-lighter);
+}
+
+.planning-act-summary {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 14px;
+    cursor: pointer;
+    list-style: none;
+    user-select: none;
+}
+
+.planning-act-summary::-webkit-details-marker {
+    display: none;
+}
+
+.planning-act-summary::before {
+    content: '▸';
+    margin-right: 8px;
+    color: var(--gray-400);
+    font-size: 12px;
+    transition: transform 0.15s;
+}
+
+.planning-act-card[open] > .planning-act-summary::before {
+    content: '▾';
+}
+
+.planning-act-name {
+    flex: 1;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--gray-800);
+}
+
+.planning-act-badge {
+    font-size: 11px;
+    padding: 2px 8px;
+    border-radius: 10px;
+    background: var(--primary-lighter);
+    color: var(--primary);
+    font-weight: 500;
+    white-space: nowrap;
+}
+
+.planning-act-badge-empty {
+    background: var(--gray-100);
+    color: var(--gray-400);
+}
+
+.planning-act-body {
+    padding: 0 14px 14px;
+}
+
+/* Two-column layout */
+.planning-columns {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+}
+
+.planning-col {
+    min-width: 0;
+}
+
+/* Section labels */
+.planning-section-label {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--gray-500);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 6px;
+}
+
+/* Shared remove button for planning rows */
+.planning-remove-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    padding: 0;
+    border: 1px solid transparent;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--gray-400);
+    font-size: 14px;
+    cursor: pointer;
+    transition: var(--transition);
+    flex-shrink: 0;
+}
+
+.planning-remove-btn:hover {
+    background: #fef2f2;
+    color: var(--danger);
+    border-color: #fecaca;
+}
+
+/* Subtask rows */
+.subtask-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 4px;
+}
+
+.subtask-row .subtask-name {
+    flex: 1;
+    font-size: 12px;
+    padding: 4px 8px;
+}
+
+.subtask-row .subtask-effort {
+    width: 56px;
+    font-size: 12px;
+    padding: 4px 8px;
+    text-align: right;
+}
+
+.subtask-unit {
+    font-size: 11px;
+    color: var(--gray-500);
+}
+
+.planning-add-subtask {
+    font-size: 11px;
+    padding: 3px 8px;
+    margin-top: 4px;
+    color: var(--gray-500);
+    border: 1px dashed var(--gray-300);
+    background: none;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    transition: var(--transition);
+    font-family: inherit;
+}
+
+.planning-add-subtask:hover {
+    color: var(--primary);
+    border-color: var(--primary-light);
+    background: var(--primary-lighter);
+}
+
+/* Assignment rows */
+.assignment-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 4px;
+}
+
+.assignment-name {
+    font-size: 12px;
+    color: var(--gray-700);
+    min-width: 72px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.assignment-slider {
+    flex: 1;
+    accent-color: var(--primary);
+    cursor: pointer;
+    height: 16px;
+}
+
+.assignment-value {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--primary);
+    min-width: 20px;
+    text-align: right;
+}
+
+.assignment-unit {
+    font-size: 11px;
+    color: var(--gray-500);
+}
+
+.planning-drop-hint {
+    font-size: 12px;
+    color: var(--gray-400);
+    font-style: italic;
+    padding: 6px 0;
+}
+
+/* KPI summary */
+.planning-calc {
+    border-top: 1px solid var(--gray-100);
+    margin-top: 10px;
+    padding-top: 10px;
+}
+
+.planning-kpis {
+    display: flex;
+    gap: 8px;
+}
+
+.planning-kpi {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 8px 6px;
+    background: var(--gray-50);
+    border: 1px solid var(--gray-200);
+    border-radius: var(--radius-sm);
+    text-align: center;
+    min-width: 0;
+}
+
+.planning-kpi-accent {
+    background: var(--primary-lighter);
+    border-color: var(--primary-light);
+}
+
+.planning-kpi-value {
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--gray-800);
+    line-height: 1.2;
+}
+
+.planning-kpi-accent .planning-kpi-value {
+    color: var(--primary);
+}
+
+.planning-kpi-label {
+    font-size: 10px;
+    color: var(--gray-500);
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+    margin-top: 2px;
+}
+
+.planning-kpi-accent .planning-kpi-label {
+    color: var(--primary);
+    opacity: 0.7;
+}
+
+.planning-calc-empty {
+    font-size: 11px;
+    color: var(--gray-400);
+    font-style: italic;
+}
+
+.planning-apply-btn {
+    margin-top: 8px;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 10px;
+    font-size: 11px;
+    font-weight: 500;
+    font-family: inherit;
+    border: 1px solid var(--gray-300);
+    border-radius: var(--radius-sm);
+    background: white;
+    color: var(--gray-700);
+    cursor: pointer;
+    transition: var(--transition);
+    white-space: nowrap;
+}
+
+.planning-apply-btn:hover {
+    background: var(--gray-50);
+    border-color: var(--primary-light);
+    color: var(--primary);
+}

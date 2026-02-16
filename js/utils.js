@@ -213,5 +213,28 @@ App.Utils = {
             clearTimeout(timer);
             timer = setTimeout(() => fn.apply(this, args), delay);
         };
+    },
+
+    calculatePlannedDuration(planning, startDate) {
+        if (!planning) return null;
+        const subtasks = planning.subtasks || [];
+        const assignments = planning.assignments || [];
+        if (subtasks.length === 0 || assignments.length === 0) return null;
+
+        const totalEffort = subtasks.reduce((sum, s) => sum + (parseFloat(s.effortDays) || 0), 0);
+        const weeklyCapacity = assignments.reduce((sum, a) => sum + (parseFloat(a.daysPerWeek) || 0), 0);
+
+        if (totalEffort <= 0 || weeklyCapacity <= 0) return null;
+
+        const calendarDays = Math.ceil(totalEffort / weeklyCapacity * 7);
+        let suggestedEndDate = null;
+        const start = this.parseDate(startDate);
+        if (start) {
+            const end = new Date(start);
+            end.setDate(end.getDate() + calendarDays);
+            suggestedEndDate = this.toISODate(end);
+        }
+
+        return { totalEffort, weeklyCapacity, calendarDays, suggestedEndDate };
     }
 };

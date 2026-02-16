@@ -24,6 +24,8 @@ App.Actions = {
         // Re-render vista corrente
         if (App.state.currentView === 'gantt') {
             App.UI.renderGanttView();
+        } else if (App.state.currentView === 'planning') {
+            App.UI.renderPlanningView();
         } else {
             App.UI.renderDashboard();
         }
@@ -233,6 +235,35 @@ App.Actions = {
                     for (const dep of act.dependencies) {
                         if (idMap[dep.predecessorId]) {
                             dep.predecessorId = idMap[dep.predecessorId];
+                        }
+                    }
+                }
+            }
+        }
+
+        // Remap collaborator IDs
+        if (clone.collaborators) {
+            for (const collab of clone.collaborators) {
+                const newCollabId = App.Utils.generateId('collab');
+                idMap[collab.id] = newCollabId;
+                collab.id = newCollabId;
+            }
+        }
+
+        // Remap planning subtask IDs and collaborator references
+        for (const phase of clone.phases) {
+            for (const act of phase.activities) {
+                if (act.planning) {
+                    if (act.planning.subtasks) {
+                        for (const sub of act.planning.subtasks) {
+                            sub.id = App.Utils.generateId('sub');
+                        }
+                    }
+                    if (act.planning.assignments) {
+                        for (const asgn of act.planning.assignments) {
+                            if (idMap[asgn.collaboratorId]) {
+                                asgn.collaboratorId = idMap[asgn.collaboratorId];
+                            }
                         }
                     }
                 }

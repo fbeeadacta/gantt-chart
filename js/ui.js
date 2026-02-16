@@ -1689,12 +1689,23 @@ App.UI = {
         App.state.currentView = view;
         document.getElementById('dashboard-view').style.display = view === 'dashboard' ? '' : 'none';
         document.getElementById('gantt-view').style.display = view === 'gantt' ? 'flex' : 'none';
+        document.getElementById('planning-view').style.display = view === 'planning' ? 'flex' : 'none';
 
         if (view === 'dashboard') {
             this.renderDashboard();
         } else if (view === 'gantt') {
             this.renderGanttView();
+        } else if (view === 'planning') {
+            this.renderPlanningView();
         }
+    },
+
+    renderPlanningView() {
+        const project = App.getCurrentProject();
+        if (!project) return;
+        document.getElementById('planning-project-title').textContent = project.title;
+        const container = document.getElementById('planning-activities');
+        App.Planning.render(project, container);
     },
 
     // === THEME ===

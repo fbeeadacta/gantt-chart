@@ -150,6 +150,15 @@ async function selectWorkspace() {
     }
 }
 
+// Planning view
+function openPlanningView() {
+    App.UI.showView('planning');
+}
+
+function backFromPlanning() {
+    App.UI.showView('gantt');
+}
+
 // Undo/Redo
 function undoAction() {
     App.History.undo();
