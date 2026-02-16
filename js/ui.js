@@ -115,6 +115,9 @@ App.UI = {
         const grid = document.getElementById('project-grid');
         grid.innerHTML = '';
 
+        // Banner riconnessione workspace
+        this._renderReconnectBanner();
+
         // Stato connessione workspace
         this.updateWorkspaceStatus();
 
@@ -343,6 +346,29 @@ App.UI = {
         }
 
         el.innerHTML = `<button class="workspace-status-btn" onclick="showGlobalSettings()" title="${title}" style="color:${color}">${icon}<span class="workspace-status-dot" style="background:${color}"></span></button>`;
+    },
+
+    _renderReconnectBanner() {
+        const existing = document.getElementById('reconnect-banner');
+        if (existing) existing.remove();
+
+        if (!App.state._showReconnectBanner) return;
+
+        const banner = document.createElement('div');
+        banner.id = 'reconnect-banner';
+        banner.className = 'reconnect-banner';
+        banner.innerHTML = `
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+            <span>Cartella di lavoro non connessa — i progetti potrebbero non essere salvati.</span>
+            <button class="btn btn-primary btn-small" onclick="reconnectWorkspace()">Riconnetti</button>
+            <button class="btn-icon" onclick="this.closest('.reconnect-banner').remove()" title="Chiudi">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>`;
+
+        const content = document.querySelector('.dashboard-content');
+        if (content) {
+            content.insertBefore(banner, content.firstChild);
+        }
     },
 
     // === GANTT VIEW ===

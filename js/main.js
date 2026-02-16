@@ -41,12 +41,18 @@ document.addEventListener('DOMContentLoaded', async () => {
     } catch(e) {}
 
     // Tenta riconnessione alla cartella
+    let reconnectResult = 'no-handle';
     if (App.state.fsAccessSupported) {
-        await App.Workspace.reconnect();
+        reconnectResult = await App.Workspace.reconnect();
     }
 
     // Carica progetti
     App.state.projects = await App.Storage.loadAll();
+
+    // Mostra banner di riconnessione se serve un gesto utente
+    if (reconnectResult === 'needs-gesture') {
+        App.state._showReconnectBanner = true;
+    }
 
     // Ripristina stato tools panel
     try {
@@ -138,6 +144,24 @@ function importProject() {
         }
     };
     input.click();
+}
+
+async function reconnectWorkspace() {
+    const handle = App.state._pendingHandle;
+    if (!handle) return;
+    try {
+        const perm = await handle.requestPermission({ mode: 'readwrite' });
+        if (perm === 'granted') {
+            App.state.dirHandle = handle;
+            App.state._pendingHandle = null;
+            App.state._showReconnectBanner = false;
+            App.state.projects = await App.Storage.loadAll();
+            App.UI.renderDashboard();
+            App.UI.toast('Cartella di lavoro riconnessa');
+        }
+    } catch (e) {
+        App.UI.toast('Impossibile riconnettersi alla cartella', 'error');
+    }
 }
 
 async function selectWorkspace() {

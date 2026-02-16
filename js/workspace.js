@@ -49,23 +49,26 @@ App.Workspace = {
 
     async reconnect() {
         const handle = await this.loadHandle();
-        if (!handle) return false;
+        if (!handle) return 'no-handle';
 
         try {
             const perm = await handle.queryPermission({ mode: 'readwrite' });
             if (perm === 'granted') {
                 App.state.dirHandle = handle;
-                return true;
+                return 'granted';
             }
+            // Permission needs user gesture — try requesting (works if called from click)
             const req = await handle.requestPermission({ mode: 'readwrite' });
             if (req === 'granted') {
                 App.state.dirHandle = handle;
-                return true;
+                return 'granted';
             }
         } catch (e) {
             console.warn('Impossibile riconnettersi alla cartella:', e);
         }
-        return false;
+        // Handle exists but permission not granted — needs user gesture
+        App.state._pendingHandle = handle;
+        return 'needs-gesture';
     },
 
     async listProjectFiles() {

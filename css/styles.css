@@ -364,6 +364,35 @@ body {
     border: 2px solid white;
 }
 
+/* === RECONNECT BANNER === */
+.reconnect-banner {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 16px;
+    margin-bottom: 16px;
+    background: #fef3cd;
+    border: 1px solid #ffc107;
+    border-radius: var(--radius-md);
+    color: var(--gray-800);
+    font-size: 13px;
+}
+
+.reconnect-banner svg:first-child {
+    color: var(--warning);
+    flex-shrink: 0;
+}
+
+.reconnect-banner span {
+    flex: 1;
+}
+
+.reconnect-banner .btn-icon {
+    width: 24px;
+    height: 24px;
+    color: var(--gray-500);
+}
+
 /* === PROJECT CARDS === */
 #project-grid {
 }
