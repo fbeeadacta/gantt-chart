@@ -1309,6 +1309,7 @@ body.dragging-grab { cursor: grabbing !important; }
 body.dragging-col-resize, body.dragging-col-resize * { cursor: col-resize !important; }
 body.dragging-row-resize, body.dragging-row-resize * { cursor: ns-resize !important; }
 body.dragging-ew *, body.dragging-grab * { cursor: inherit !important; }
+body.dragging-dep, body.dragging-dep * { cursor: crosshair !important; }
 
 /* === ZOOMED SVG (scroll orizzontale) === */
 #gantt-svg-container.zoomed svg { max-width: none; }

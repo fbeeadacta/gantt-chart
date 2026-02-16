@@ -73,6 +73,20 @@ App.Gantt = {
         markerCrit.appendChild(arrowPolyCrit);
         defs.appendChild(markerCrit);
 
+        // Marker freccia per drag preview dipendenza (blu)
+        const markerDrag = document.createElementNS(this.ns, 'marker');
+        markerDrag.setAttribute('id', 'dep-arrowhead-drag');
+        markerDrag.setAttribute('markerWidth', '5');
+        markerDrag.setAttribute('markerHeight', '4');
+        markerDrag.setAttribute('refX', '5');
+        markerDrag.setAttribute('refY', '2');
+        markerDrag.setAttribute('orient', 'auto');
+        const arrowPolyDrag = document.createElementNS(this.ns, 'polygon');
+        arrowPolyDrag.setAttribute('points', '0 0, 5 2, 0 4');
+        arrowPolyDrag.setAttribute('fill', '#5c88da');
+        markerDrag.appendChild(arrowPolyDrag);
+        defs.appendChild(markerDrag);
+
         svg.appendChild(defs);
 
         // Style: hover effects
@@ -82,6 +96,7 @@ App.Gantt = {
             .act-bar:hover { filter: url(#shadow-lift); transform: translateY(-2px); }
             .reorder-grip { opacity: 0; transition: opacity 0.15s ease; }
             .reorder-grip:hover { opacity: 1; }
+            .dep-drop-target { stroke: #5c88da; stroke-width: 2.5; }
         `;
         svg.appendChild(style);
 

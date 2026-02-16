@@ -78,6 +78,12 @@ App.Drag = {
         const act = this.findActivity(actId);
         if (!act) return;
 
+        // Shift+drag su barra attività: inizia creazione dipendenza
+        if (e.shiftKey) {
+            this.startDependencyDrag(e, actId, act);
+            return;
+        }
+
         // Controlla se è un segmento
         const segIdxAttr = target.getAttribute('data-segment-idx');
         const segIdx = segIdxAttr != null ? parseInt(segIdxAttr) : null;
@@ -327,6 +333,69 @@ App.Drag = {
         e.preventDefault();
     },
 
+    startDependencyDrag(e, actId, act) {
+        const layout = this._layout;
+        const endDate = App.Utils.parseDate(act.endDate);
+        if (!endDate) return;
+
+        const startX = App.Gantt.dateToX(endDate, layout);
+
+        // Trova posizione Y dell'attività nel layout
+        let startY = null;
+        for (const pl of layout.phaseLayouts) {
+            for (const al of pl.activities) {
+                if (al.activity.id === actId) {
+                    startY = al.y + App.GANTT.activityRowHeight / 2;
+                    break;
+                }
+            }
+            if (startY !== null) break;
+        }
+        if (startY === null) return;
+
+        const svgPt = this.screenToSVG(e.clientX, e.clientY);
+
+        // Crea freccia tratteggiata temporanea
+        const line = document.createElementNS(App.Gantt.ns, 'line');
+        line.setAttribute('x1', startX);
+        line.setAttribute('y1', startY);
+        line.setAttribute('x2', svgPt.x);
+        line.setAttribute('y2', svgPt.y);
+        line.setAttribute('stroke', '#5c88da');
+        line.setAttribute('stroke-width', '2');
+        line.setAttribute('stroke-dasharray', '6,4');
+        line.setAttribute('marker-end', 'url(#dep-arrowhead-drag)');
+        line.setAttribute('pointer-events', 'none');
+        this._svg.appendChild(line);
+
+        this._state = {
+            type: 'create-dependency',
+            predecessorId: actId,
+            startX,
+            startY,
+            tempLine: line,
+            targetActId: null,
+            _highlightedEl: null,
+            moved: false
+        };
+
+        this._dragging = true;
+        this._justDragged = false;
+
+        document.body.classList.add('dragging-dep');
+        this._cursorClass = 'dragging-dep';
+
+        this._onMouseMove = (ev) => this.handleMouseMove(ev);
+        this._onMouseUp = (ev) => this.handleMouseUp(ev);
+        this._onKeyDown = (ev) => { if (ev.key === 'Escape') this.cancelDrag(); };
+
+        document.addEventListener('mousemove', this._onMouseMove);
+        document.addEventListener('mouseup', this._onMouseUp);
+        document.addEventListener('keydown', this._onKeyDown);
+
+        e.preventDefault();
+    },
+
     handleMouseMove(e) {
         if (!this._dragging || !this._state) return;
         const s = this._state;
@@ -480,6 +549,55 @@ App.Drag = {
                 lineY = pl.activities[targetIdx].y;
             }
             this._drawIndicatorLine(lineY);
+            return;
+        }
+
+        // Create-dependency: aggiorna freccia temporanea e trova target
+        if (s.type === 'create-dependency') {
+            const svgPt = this.screenToSVG(e.clientX, e.clientY);
+            s.moved = true;
+
+            s.tempLine.setAttribute('x2', svgPt.x);
+            s.tempLine.setAttribute('y2', svgPt.y);
+
+            // Nasconde la linea per trovare l'elemento sotto il cursore
+            s.tempLine.style.display = 'none';
+            const el = document.elementFromPoint(e.clientX, e.clientY);
+            s.tempLine.style.display = '';
+
+            let targetActId = null;
+            if (el) {
+                targetActId = el.getAttribute && el.getAttribute('data-activity-id');
+                if (!targetActId) targetActId = el.getAttribute && el.getAttribute('data-bar-act');
+                if (!targetActId) {
+                    let parent = el.parentElement;
+                    while (parent && parent !== this._svg) {
+                        targetActId = (parent.getAttribute && parent.getAttribute('data-activity-id'))
+                                   || (parent.getAttribute && parent.getAttribute('data-bar-act'));
+                        if (targetActId) break;
+                        parent = parent.parentElement;
+                    }
+                }
+            }
+
+            // Rimuovi evidenziazione precedente
+            if (s._highlightedEl) {
+                s._highlightedEl.classList.remove('dep-drop-target');
+                s._highlightedEl = null;
+            }
+
+            if (targetActId && targetActId !== s.predecessorId) {
+                s.targetActId = targetActId;
+                const bgRect = this._svg.querySelector(
+                    `rect[data-bar-role="background"][data-bar-act="${targetActId}"]:not([data-bar-seg])`
+                );
+                if (bgRect) {
+                    bgRect.classList.add('dep-drop-target');
+                    s._highlightedEl = bgRect;
+                }
+            } else {
+                s.targetActId = null;
+            }
             return;
         }
 
@@ -673,6 +791,48 @@ App.Drag = {
             return;
         }
 
+        // Create-dependency: crea la dipendenza o cleanup
+        if (s.type === 'create-dependency') {
+            if (s.tempLine) s.tempLine.remove();
+            if (s._highlightedEl) {
+                s._highlightedEl.classList.remove('dep-drop-target');
+            }
+
+            if (s.targetActId && s.targetActId !== s.predecessorId) {
+                const project = App.getCurrentProject();
+                if (project) {
+                    const targetAct = this.findActivity(s.targetActId);
+                    const predAct = this.findActivity(s.predecessorId);
+
+                    if (targetAct && predAct) {
+                        if (targetAct.dependencies && targetAct.dependencies.some(d => d.predecessorId === s.predecessorId)) {
+                            App.UI.toast('Dipendenza già esistente', 'warning');
+                        } else if (App.Dependencies.hasCircularDependency(project, s.targetActId, s.predecessorId)) {
+                            App.UI.toast('Dipendenza circolare non consentita', 'error');
+                        } else {
+                            if (!targetAct.dependencies) targetAct.dependencies = [];
+                            const offset = App.Dependencies.computeOffset(predAct, targetAct, 'end', 'start');
+                            targetAct.dependencies.push({
+                                predecessorId: s.predecessorId,
+                                fromPoint: 'end',
+                                toPoint: 'start',
+                                offsetDays: offset
+                            });
+                            App.Dependencies.applyOwnDependencies(project, s.targetActId);
+                            App.Dependencies.cascadeDependents(project, s.targetActId);
+                            App.Actions.saveAndRender();
+                            App.UI.toast('Dipendenza creata', 'success');
+                        }
+                    }
+                }
+            }
+
+            this._justDragged = true;
+            setTimeout(() => { this._justDragged = false; }, 300);
+            this.cleanup();
+            return;
+        }
+
         // Calcola date finali
         const layout = this._layout;
         const svgPt = this.screenToSVG(e.clientX, e.clientY);
@@ -785,6 +945,16 @@ App.Drag = {
         if (s.type === 'move-milestone') {
             if (s.msGroup) {
                 s.msGroup.removeAttribute('transform');
+            }
+            this.cleanup();
+            return;
+        }
+
+        // Create-dependency: rimuovi freccia temporanea e evidenziazione
+        if (s.type === 'create-dependency') {
+            if (s.tempLine) s.tempLine.remove();
+            if (s._highlightedEl) {
+                s._highlightedEl.classList.remove('dep-drop-target');
             }
             this.cleanup();
             return;
