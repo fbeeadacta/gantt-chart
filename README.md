@@ -14,12 +14,16 @@ Aprire `index.html` in **Chrome** o **Edge**. Nessun server, nessuna installazio
 
 ## Funzionalit&agrave;
 
-- **Dashboard multi-progetto** con schede riassuntive
+- **Dashboard multi-progetto** con schede riassuntive, ricerca, ordinamento, filtro per cliente, vista griglia/lista
 - **Editor Gantt interattivo**: drag & drop per spostare e ridimensionare barre attivit&agrave;, segmenti e milestone
 - **Fasi e attivit&agrave;** con avanzamento percentuale e milestone di fine
 - **Milestone Steering** (kick-off, comitati guida) sulla riga dedicata
 - **Segmenti**: periodi di lavoro multipli sulla stessa attivit&agrave;
-- **Dipendenze**: collegamenti tra attivit&agrave; (Fine→Inizio, Inizio→Inizio, ecc.) con offset in giorni, frecce SVG sul Gantt, propagazione a cascata e pannello laterale dedicato per gestione rapida
+- **Dipendenze**: collegamenti tra attivit&agrave; (Fine→Inizio, Inizio→Inizio, ecc.) con offset in giorni, frecce SVG sul Gantt, propagazione a cascata e pannello laterale dedicato
+- **Cammino critico**: analisi CPM con evidenziazione attivit&agrave; a slack zero
+- **Zoom timeline**: tre livelli (settimane, mesi, trimestri) con persistenza per progetto
+- **Pianificazione durata**: stima effort per sottotask, pool collaboratori con disponibilit&agrave;, assegnazione drag & drop, calcolo automatico durata calendario
+- **Undo/Redo**: cronologia a 30 stati con Ctrl+Z / Ctrl+Y
 - **Versioning**: snapshot e confronto baseline con barre fantasma
 - **Export** SVG vettoriale e PNG ad alta risoluzione (3840&times;2160)
 - **Salvataggio automatico** su cartella locale via File System Access API
@@ -32,7 +36,7 @@ Zero-build, vanilla JavaScript. Nessun npm, bundler o framework.
 Tutto il codice vive sotto un unico oggetto globale `App`, con moduli caricati in sequenza da `index.html`:
 
 ```
-app.js → utils.js → dependencies.js → workspace.js → storage.js → gantt.js → drag.js → ui.js → exporter.js → actions.js → main.js
+app.js → utils.js → dependencies.js → workspace.js → storage.js → gantt.js → planning.js → drag.js → history.js → ui.js → exporter.js → actions.js → main.js
 ```
 
 ### Persistenza
