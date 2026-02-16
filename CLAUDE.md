@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Gantt Project Manager — a zero-build vanilla JavaScript web app for creating Gantt charts optimized for PowerPoint export. No npm, no bundler, no framework. Opens directly in Chrome/Edge via `index.html`.
 
-Documentation is in Italian (design.md for requirements, tecstack.md for architecture).
+Documentation is in Italian (design.md for requirements). Note: `tecstack.md` describes a different project and is not relevant.
 
 ## Development
 
@@ -20,17 +20,19 @@ Global namespace pattern: all modules attach to a single `App` object defined in
 
 ### Script loading order (sequential, in index.html)
 
-1. `app.js` — Global `App` namespace, state (includes `dashboardSearch`, `dashboardSort`, `dashboardViewMode`, `dashboardClientFilter`), constants (colors, layout dimensions, Italian month names)
-2. `utils.js` — Pure helpers: date math, ID generation (`generateId`), `deepClone`, `debounce`
-3. `dependencies.js` — Dependency graph logic for activity relationships (FS/FF/SS/SF types with offset)
+1. `app.js` — Global `App` namespace, state, constants (colors, layout dimensions, Italian month names)
+2. `utils.js` — Pure helpers: date math, ID generation (`generateId`), `deepClone`, `debounce`, `calculatePlannedDuration()`, timeline period generators (`getTimePeriods`, `getISOWeek`, `getWeeksList`, `getQuartersList`)
+3. `dependencies.js` — Dependency graph logic for activity relationships (FS/FF/SS/SF types with offset) + critical path (CPM forward/backward pass with topological sort)
 4. `workspace.js` — File System Access API wrapper + IndexedDB for persisting DirectoryHandle
 5. `storage.js` — Persistence abstraction over FS Access API and localStorage fallback
-6. `gantt.js` — SVG rendering engine (1920×1080 canvas, month-based timeline, bars, milestones, baseline ghost bars)
-7. `drag.js` — Interactive drag system for activity bars, segments, milestones, and layout resize handles
-8. `ui.js` — Dashboard rendering (grid/list views, search, sort, client filter), modal system, settings panels, versions panel, toast notifications
-9. `exporter.js` — SVG and PNG (3840×2160) export via Canvas API
-10. `actions.js` — Business logic coordinator: CRUD for projects/phases/activities/milestones/snapshots + `duplicateProject()` with deep clone and ID remapping
-11. `main.js` — DOMContentLoaded init, 20+ window-scope functions bound to `onclick` handlers
+6. `gantt.js` — SVG rendering engine (1920×1080 canvas, multi-unit timeline, bars, milestones, baseline ghost bars)
+7. `planning.js` — Activity duration planning view: subtask effort estimation, collaborator pool with availability, drag-and-drop assignment, real-time calendar duration calculation
+8. `drag.js` — Interactive drag system for activity bars, segments, milestones, and layout resize handles
+9. `history.js` — Undo/redo stack (max 30 states), snapshots of project data, pause mechanism during restore
+10. `ui.js` — Dashboard rendering (grid/list views, search, sort, client filter), modal system, settings panels, versions panel, toast notifications, planning view rendering
+11. `exporter.js` — SVG and PNG (3840×2160) export via Canvas API
+12. `actions.js` — Business logic coordinator: CRUD for projects/phases/activities/milestones/snapshots + `duplicateProject()` with deep clone and ID remapping (including collaborators and planning data)
+13. `main.js` — DOMContentLoaded init, 20+ window-scope functions bound to `onclick` handlers, keyboard shortcuts
 
 ### Data flow
 
@@ -46,9 +48,39 @@ User onclick → window function (main.js) → App.Actions (mutate state) → Ap
 - Auto-save on every modification via `App.Actions.saveAndRender()` (immediate save + re-render)
 - File naming: `<sanitized project title>.gantt.json` via `App.Workspace.sanitizeFileName()`
 
+### Views
+
+Three views controlled by `App.UI.showView(view)`:
+
+- **`dashboard`** — Project list (grid/list modes, search, sort, client filter)
+- **`gantt`** — Gantt chart editor with SVG rendering
+- **`planning`** — Activity duration planning: define subtasks with effort estimates, assign collaborators from a pool, auto-calculate calendar durations. Navigation via `openPlanningView()` / `backFromPlanning()`
+
+### Keyboard shortcuts
+
+- **Ctrl+Z / Cmd+Z**: Undo
+- **Ctrl+Y / Cmd+Y / Ctrl+Shift+Z**: Redo
+- **Escape**: Close modal, settings panel, versions panel, or deps panel; cancel drag
+- Shortcuts are suppressed when focus is on input/textarea/select elements
+
 ### Data model
 
-Projects contain: `phases[]` (each with `activities[]`), `steeringMilestones[]`, `snapshots[]` (for versioning/baseline), and `client` (optional string). Files use `_type: "gantt_project"` and `_version: 1` markers. `_lastSaved` (ISO timestamp) is set on every save and used for dashboard sorting.
+Projects contain: `phases[]` (each with `activities[]`), `steeringMilestones[]`, `snapshots[]` (for versioning/baseline), `client` (optional string), and `collaborators[]` (for planning view). Files use `_type: "gantt_project"` and `_version: 1` markers. `_lastSaved` (ISO timestamp) is set on every save and used for dashboard sorting.
+
+#### Collaborators and planning
+
+```javascript
+project.collaborators = [
+    { id: 'collab_...', name: 'Alice', daysPerWeek: 5 }
+]
+
+activity.planning = {
+    subtasks: [{ id: 'sub_...', name: 'Task A', effortDays: 10 }],
+    assignments: [{ collaboratorId: 'collab_...', daysPerWeek: 3 }]
+}
+```
+
+Duration calculation (`App.Utils.calculatePlannedDuration`): `calendarDays = ceil(totalEffort / weeklyCapacity * 7)`. Collaborator and subtask IDs are remapped during `duplicateProject()`.
 
 #### Activity segments
 
@@ -80,7 +112,17 @@ Segments are rendered as additional bars on the same Y row as the main activity.
 
 SVG rendered at fixed 1920×1080 (default). Left panel is 380px wide (default). Layers rendered in order: header → left panel → grid → panel grip → month grips → steering row → phases/activities → today line → bottom grip → baseline overlay. Coordinate conversion via `dateToX()` / `xToDate()` maps between calendar dates and pixel positions.
 
-`computeLayout(project)` returns the central layout object used by both rendering and drag: `{ months, range, timelineX, timelineWidth, monthWidth, svgWidth, steeringY, phaseLayouts[], totalHeight }`. Phase rows are equalized to the tallest phase height.
+`computeLayout(project)` returns the central layout object used by both rendering and drag: `{ months, range, timelineX, timelineWidth, monthWidth, svgWidth, steeringY, phaseLayouts[], totalHeight, timelineUnit }`. Phase rows are equalized to the tallest phase height.
+
+#### Timeline zoom
+
+Three zoom levels controlled by `App.state.timelineUnit` (persisted per-project as `gantt_timelineUnit_<id>`):
+
+- **`week`** — ISO week numbers (W1, W2, W3...)
+- **`month`** — Italian month abbreviations (GEN, FEB, MAR...) — default
+- **`quarter`** — Quarters (Q1, Q2, Q3, Q4)
+
+Zoom controls are in the tools panel (Sett / Mese / Trim buttons). `App.Utils.getTimePeriods(unit, start, end)` generates the unified period list. When SVG width exceeds viewport, the container gets `.zoomed` class for horizontal scroll.
 
 Per-project layout overrides (monthWidth, leftPanelWidth, svgHeight) are stored in `App.state` and persisted to localStorage with keys `gantt_monthWidth_<projectId>`, `gantt_leftPanelWidth_<projectId>`, `gantt_svgHeight_<projectId>`.
 
@@ -111,11 +153,19 @@ Global settings panel (`showGlobalSettingsPanel()`) provides access to workspace
 - **Buttons (`.btn`)**: gray text (`--gray-700`), transparent/white background, gray border. On hover: primary color text, `--primary-light` border.
 - **Dashboard content**: white "paper" panel (`<div class="dashboard-content">`) at full height with side shadows over `--gray-50` body background. Max-width 1200px, centered.
 
-### Dependencies (dependencies.js)
+### Dependencies and critical path (dependencies.js)
 
 Activities support a `dependencies[]` array with predecessor relationships. Each dependency specifies `predecessorId`, `fromPoint` (start/end), `toPoint` (start/end), and `offsetDays`. Rendered as SVG arrows in the Gantt chart. Managed via a dedicated side panel (`#deps-panel`). Arrow visibility controlled by `App.state.showDependencyArrows`.
 
 When an activity is dragged, `cascadeDependents()` BFS-propagates the date shift to all downstream dependents, preserving offsets. `recalcOwnOffsets()` recalculates offsets when an activity's own dates change (e.g., resize). `hasCircularDependency()` prevents cycles before adding new dependencies.
+
+#### Critical path
+
+`App.Dependencies.computeCriticalPath(project)` implements the Critical Path Method: topological sort (Kahn's algorithm), forward pass (ES/EF), backward pass (LS/LF), then identifies zero-slack activities. Returns `{criticalActivityIds: Set, criticalArrows: Set}`. Toggled via checkbox in the deps panel. State in `App.state.showCriticalPath` (persisted as `gantt_showCriticalPath`). Critical activities are rendered with highlighted styling. Only active when dependency arrows are visible.
+
+### Undo/redo (history.js)
+
+`App.History` manages a stack-based undo/redo system (max 30 states). Each state is a snapshot of `{phases, steeringMilestones, title, client}`. `pushState()` is called automatically after every modification via `App.Actions.saveAndRender()`. A pause mechanism prevents recursive pushes during restore. Toolbar buttons (`#btn-undo`, `#btn-redo`) are auto-enabled/disabled. History is cleared on `backToDashboard()`.
 
 ### Key conventions
 
@@ -129,6 +179,10 @@ When an activity is dragged, `cascadeDependents()` BFS-propagates the date shift
 - All dates stored as `'YYYY-MM-DD'` strings, parsed via `App.Utils.parseDate()` (appends `T00:00:00` to avoid timezone issues)
 - UI text and labels are in Italian
 
+### Tools panel
+
+The Gantt view has a collapsible tools panel (toggle via `toggleToolsPanel()`, state persisted as `gantt_toolsPanelCollapsed`). Contains: version controls, today/dependency toggles, zoom level selector (Sett/Mese/Trim), and a button to open the planning view.
+
 ### localStorage keys
 
-Global: `gantt_projects` (fallback storage), `gantt_customToday`, `gantt_theme`, `gantt_showDependencyArrows`, `gantt_dashboardViewMode`, `gantt_toolsPanelCollapsed`. Per-project: `gantt_monthWidth_<id>`, `gantt_leftPanelWidth_<id>`, `gantt_svgHeight_<id>`.
+Global: `gantt_projects` (fallback storage), `gantt_customToday`, `gantt_theme`, `gantt_showDependencyArrows`, `gantt_showCriticalPath`, `gantt_dashboardViewMode`, `gantt_toolsPanelCollapsed`. Per-project: `gantt_monthWidth_<id>`, `gantt_leftPanelWidth_<id>`, `gantt_svgHeight_<id>`, `gantt_timelineUnit_<id>`.
