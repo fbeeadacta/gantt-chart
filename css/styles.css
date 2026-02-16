@@ -805,6 +805,7 @@ body {
     overflow: auto;
     padding: 16px;
     background: var(--gray-100);
+    position: relative;
 }
 
 #gantt-svg-container svg {

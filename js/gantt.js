@@ -589,8 +589,8 @@ App.Gantt = {
 
     // === BOTTOM RESIZE GRIP ===
     renderBottomGrip(svg, layout, totalHeight, svgWidth) {
-        const gripH = 8;
-        const grip = this.rect(svg, 0, totalHeight - gripH / 2, svgWidth, gripH, 'transparent');
+        const gripH = 12;
+        const grip = this.rect(svg, 0, totalHeight - gripH, svgWidth, gripH, 'transparent');
         grip.setAttribute('data-drag', 'bottom-resize');
         grip.style.cursor = 'ns-resize';
     },

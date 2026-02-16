@@ -471,7 +471,6 @@ App.UI = {
         input.style.height = (textRect.height + 4) + 'px';
 
         textEl.style.visibility = 'hidden';
-        container.style.position = 'relative';
         container.appendChild(input);
         input.focus();
         input.select();
